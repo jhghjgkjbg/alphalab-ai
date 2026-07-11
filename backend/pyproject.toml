@@ -1,0 +1,24 @@
+[project]
+name = "alphalab-ai-backend"
+version = "0.1.0"
+description = "Backend service for AlphaLab AI"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "alembic==1.18.5",
+    "fastapi[standard]==0.139.0",
+    "pydantic==2.13.4",
+    "pydantic-settings==2.14.2",
+    "sqlalchemy==2.0.51",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
