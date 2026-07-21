@@ -6,7 +6,6 @@ from agents.ai_scout.agent import AIScout
 from agents.ai_scout.collectors.hacker_news import HackerNewsCollector
 from core.collector.types import CollectorStatus
 from core.event_bus.in_memory import InMemoryEventBus
-from core.knowledge.handler import KnowledgeHandler
 from core.knowledge.repository import InMemoryKnowledgeRepository
 
 
@@ -23,13 +22,12 @@ class AIScoutPipelineTests(unittest.TestCase):
             }
 
         repository = InMemoryKnowledgeRepository()
-        handler = KnowledgeHandler(repository)
         event_bus = InMemoryEventBus()
         output = io.StringIO()
         scout = AIScout(
             collector=HackerNewsCollector(fetch_json=fetch_json),
             event_bus=event_bus,
-            knowledge_handler=handler,
+            knowledge_store=repository,
             output=output,
         )
 
@@ -38,8 +36,15 @@ class AIScoutPipelineTests(unittest.TestCase):
         self.assertEqual(result.status, CollectorStatus.SUCCESS)
         self.assertEqual(repository.count(), 2)
         self.assertEqual(
-            [item.external_id for item in repository.all()],
+            [document.source_external_id for document in repository.all()],
             ["100", "101"],
         )
         self.assertIn("Collected records: 2", output.getvalue())
-        self.assertIn("New records: 2", output.getvalue())
+        self.assertIn("Stored records: 2", output.getvalue())
+        self.assertIn("Accepted for publication: 2", output.getvalue())
+        self.assertIn("Published successfully: 2", output.getvalue())
+        self.assertIn("Summary:", output.getvalue())
+        self.assertIn("Keywords:", output.getvalue())
+        self.assertIn("Tags:", output.getvalue())
+        self.assertIn("Total score:", output.getvalue())
+        self.assertTrue(all(document.version == 2 for document in repository.all()))

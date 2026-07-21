@@ -1,19 +1,7 @@
-# Publication
+# Publication Pipeline
 
-`publication` определяет границу вывода одобренных результатов из Alpha Core.
+Publication принимает ScoringCompleted, применяет независимую Policy, создаёт immutable candidate и вызывает только выбранные каналы.
 
-## Ответственность
+ScoreThresholdPolicy MVP получает threshold и channels из composition root. ConsolePublisher только доставляет candidate и не принимает решений. PublisherRegistry и InMemoryPublicationLedger являются локальными объектами без singleton.
 
-- прием запросов на публикацию через публичный контракт;
-- проверка полноты публикационного пакета;
-- формирование канонического представления результата;
-- выпуск событий об успешной, отклоненной или неуспешной публикации.
-
-## Вне ответственности
-
-- расчет оценок;
-- выбор внешнего канала;
-- реализация API сторонних платформ;
-- управление расписанием и workflow.
-
-Конкретные каналы публикации реализуются внешними адаптерами и не должны проникать в Alpha Core.
+Candidate ID — стабильный UUIDv5 от document ID и policy version. Ledger предотвращает повторный вызов Publisher. Ошибка одного канала превращается в failed PublishResult и не останавливает остальные.

@@ -7,6 +7,7 @@ from agents.ai_scout.agent import AIScout
 from agents.ai_scout.collectors.hacker_news import HackerNewsCollector
 from agents.ai_scout.knowledge_store import KnowledgeStore
 from core.collector.types import CollectorStatus, SourceItem
+from core.knowledge.normalizer import KnowledgeNormalizer
 
 
 def make_source_item(external_id: str = "1") -> SourceItem:
@@ -63,10 +64,13 @@ class KnowledgeStoreTests(unittest.TestCase):
         store = KnowledgeStore()
         first = make_source_item("7")
         duplicate = make_source_item("7")
+        normalizer = KnowledgeNormalizer()
+        first_document = normalizer.normalize(first)
+        duplicate_document = normalizer.normalize(duplicate)
 
-        self.assertTrue(store.save(first))
-        self.assertFalse(store.save(duplicate))
-        self.assertEqual(store.all(), (first,))
+        self.assertTrue(store.add(first_document))
+        self.assertFalse(store.add(duplicate_document))
+        self.assertEqual(store.all(), (first_document,))
 
 
 class AIScoutTests(unittest.TestCase):
@@ -94,7 +98,8 @@ class AIScoutTests(unittest.TestCase):
         self.assertEqual(result.status, CollectorStatus.SUCCESS)
         self.assertEqual(len(store.all()), 2)
         self.assertIn("Collected records: 2", output.getvalue())
-        self.assertIn("New records: 2", output.getvalue())
+        self.assertIn("Stored records: 2", output.getvalue())
+        self.assertIn("Published successfully: 2", output.getvalue())
         self.assertIn("Title: Story 10", output.getvalue())
         self.assertIn("URL: https://example.com/10", output.getvalue())
         self.assertIn("Source: hacker_news", output.getvalue())

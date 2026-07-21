@@ -1,82 +1,95 @@
-# AI Scout Event-Driven Vertical Slice
+# AI Scout Canonical Pipeline
 
 ## Статус
 
-- Backlog-задачи: TASK-0006, TASK-0007.
-- Статус: рабочий событийный MVP.
-- Внешний источник: официальный Hacker News API v0.
+- Backlog-задачи: TASK-0006 — TASK-0010.
+- Статус: рабочий in-memory vertical slice.
 
-## Назначение
-
-AI Scout проверяет сквозной путь от внешнего источника до Knowledge Repository без прямой связи между агентом и хранилищем.
-
-## Поток данных
+## Полный поток
 
 ```text
+InMemoryScheduler
+       |
+       v
+SourceManager
+       |
+       v
 Hacker News API
        |
        v
 HackerNewsCollector
        |
        v
- CollectorResult
+CollectionCompleted[SourceItem]
        |
-       | AIScout creates
        v
-CollectionCompleted
+KnowledgeHandler
        |
-       | publish
        v
-InMemoryEventBus
+KnowledgeNormalizer
        |
-       | subscribed handler
        v
- KnowledgeHandler
+KnowledgeDocument
        |
        v
 InMemoryKnowledgeRepository
+       |
+       v
+KnowledgeStored(document_id)
+       |
+       v
+EnrichmentHandler
+       |
+       v
+EnrichmentEngine
+       |
+       v
+KnowledgeDocument v2
+       |
+       v
+KnowledgeEnriched(document_id)
+       |
+       v
+ScoringHandler -- read by ID --> KnowledgeDocument
+       |
+       v
+ScoringCompleted
+       |
+       v
+PublicationHandler -- read by source key --> KnowledgeDocument
+       |
+       +--> PublicationRejected
+       |
+       v
+PublicationCandidateCreated
+       |
+       v
+ConsolePublisher
+       |
+       v
+PublicationCompleted
+       |
+       v
+Console
 ```
 
-## Ответственность AIScout
+## Composition root
 
-AIScout является composition root вертикального среза:
+AIScout создаёт SourceRegistry, CollectorRegistry, SourceManager, Scheduler, Event Bus, Repository, Knowledge/Enrichment/Scoring/Publication handlers, Policy, Publisher Registry и Ledger. Collector вызывается только SourceManager. AIScout не вызывает `collect()`, PublicationEngine или Publisher напрямую.
 
-1. создаёт или получает Collector, Event Bus, Handler и Repository;
-2. подписывает `KnowledgeHandler.handle` на `CollectionCompleted`;
-3. запускает Collector;
-4. преобразует `CollectorResult` в immutable versioned event;
-5. публикует событие и ждёт завершения handlers;
-6. выводит количество собранных и новых записей.
+`--once` вызывает `SourceManager.run_enabled()` и завершается после pipeline. `--serve` передаёт управление Scheduler до cancellation.
 
-Метод `run()` не обращается к Knowledge Repository. Число новых элементов получается из результата обработки, сохранённого Handler по `event_id`.
+## Correlation
 
-## CollectionCompleted
+Один correlation ID проходит через CollectionCompleted, KnowledgeStored, KnowledgeEnriched и ScoringCompleted. Каждое событие имеет собственный event ID и версию.
 
-Событие принадлежит Collector-домену и содержит:
+## Console projection
 
-- UUID события и correlation ID;
-- номер версии контракта;
-- UTC-время возникновения;
-- имя и итоговый статус Collector;
-- immutable tuple SourceItem;
-- immutable tuple диагностических ошибок.
+ConsolePublisher получает готовый PublicationCandidate с title, URL, summary, keywords, tags, source, score и reasons. Прямой console handler на ScoringCompleted удалён.
 
-Текущая версия контракта — `1`.
+## Границы
 
-## Совместимость
-
-`agents.ai_scout.knowledge_store.KnowledgeStore` оставлен как alias `InMemoryKnowledgeRepository` для совместимости TASK-0006. Новый pipeline не использует его как прямую зависимость метода `run()`.
-
-## Ошибки
-
-- Ошибки отдельных материалов остаются частью `CollectorResult` и события.
-- Ошибка одного event handler логируется Event Bus и не отменяет другие handlers.
-- Неуспешный Collector всё равно публикует `CollectionCompleted`, позволяя подписчикам наблюдать завершение без данных.
-
-## Границы MVP
-
-- нет Redis, PostgreSQL и внешнего брокера;
-- нет LLM, Telegram и Product Hunt;
-- нет durable delivery и межпроцессной передачи;
-- нет канонизации SourceItem в полноценную Knowledge Model;
-- консольный вывод остаётся локальным интерфейсом наблюдения.
+- нет Workflow Engine, PostgreSQL, Redis и внешнего брокера;
+- нет LLM, embeddings, Telegram и FastAPI;
+- KnowledgeStore alias оставлен только для совместимости импортов и не используется новым pipeline;
+- score и документы не переживают завершение процесса.

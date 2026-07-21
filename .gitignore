@@ -4,3 +4,8 @@
 
 __pycache__/
 *.py[cod]
+runtime/*.db
+runtime/*.db-*
+runtime/*.json
+*.log
+.pytest_cache/

@@ -2,57 +2,47 @@
 
 ## Статус
 
-- Backlog-задача: TASK-0007.
-- Статус: событийный MVP с in-memory repository.
-- Каноническая Knowledge Model: ещё не определена.
+- Backlog-задачи: TASK-0007, TASK-0009, TASK-0010.
+- Статус: canonical in-memory MVP.
 
-## Роль
-
-Knowledge Pipeline принимает `CollectionCompleted` через `KnowledgeHandler` и сохраняет содержащиеся `SourceItem` за портом `KnowledgeRepository`.
+## Поток
 
 ```text
 CollectionCompleted
         |
         v
- KnowledgeHandler
+KnowledgeHandler
         |
-        | save(SourceItem)
-        v
-KnowledgeRepository <|-- InMemoryKnowledgeRepository
+        +--> KnowledgeNormalizer(SourceItem)
+        |          |
+        |          v
+        |    KnowledgeDocument
+        |          |
+        +--> KnowledgeRepository.add(document)
+                   |
+                   +--> duplicate: stop
+                   |
+                   +--> new: KnowledgeStored(document_id)
 ```
 
-## Repository-порт
+KnowledgeHandler изолирует ошибку нормализации одного элемента, продолжает обработку и сохраняет статистику `received/stored/duplicates/failed` по исходному event ID.
 
-`KnowledgeRepository` — структурный Protocol с операциями:
+## Repository
 
-- `save(item)` — сохранить уникальный SourceItem и вернуть факт вставки;
-- `all()` — вернуть записи в порядке вставки;
-- `count()` — вернуть количество уникальных записей.
+Repository хранит только KnowledgeDocument. MVP-порт предоставляет `add`, `get`, `get_by_source_key`, `all` и `count`. Два словарных индекса обеспечивают быстрый lookup по UUID и по `(source, source_external_id)`.
 
-Уникальный ключ — `(source, external_id)`. Он предотвращает дубли при повторной доставке и допускает одинаковые external ID у разных источников.
+Порт также предоставляет `update(document, expected_version)`. Update успешен только если текущая версия совпадает с expected version, новая версия равна `expected+1`, а ID и source key не изменились. Конфликт не перезаписывает документ.
 
-## Handler
+Возвращается исходный immutable KnowledgeDocument, поэтому вызывающая сторона не может изменить состояние Repository через полученный объект.
 
-`KnowledgeHandler` является единственным участником текущего pipeline, который вызывает Repository. Он обрабатывает все items события и сохраняет количество новых записей по `event_id`. Эта статистика позволяет composition root показать результат обработки, не обращаясь к Repository напрямую.
+## KnowledgeStored
 
-## Идемпотентность
+Событие версии 1 содержит только envelope, document ID, source identity и correlation ID. Документ не дублируется в событии. Потребитель обязан получить актуальный документ через read-only repository-порт.
 
-Повторная обработка одного `CollectionCompleted` не создаёт новые записи для уже сохранённых `(source, external_id)`. В памяти сохраняется первая версия элемента; политика обновления пока отсутствует.
+## Ограничения
 
-## Архитектурные границы
-
-- AIScout публикует событие, но не вызывает Repository.
-- Event Bus не импортирует Knowledge.
-- Repository не знает о событиях, handlers и Collector.
-- Handler зависит от repository Protocol, а не от конкретного хранилища.
-- In-memory реализация не должна проникать в доменные контракты.
-
-## Ограничения MVP
-
-- данные теряются при завершении процесса;
-- нет транзакций и конкурентной синхронизации;
-- нет обновления существующей записи;
-- нет канонизации, поиска, версионирования знания и provenance graph;
-- нет durable inbox для защиты от повторной доставки после рестарта.
-
-PostgreSQL-адаптер и полноценная Knowledge Model должны появиться отдельными задачами без изменения producer-контракта `CollectionCompleted`.
+- нет транзакционной связи add/publish;
+- нет PostgreSQL, outbox и durable delivery;
+- хранится только последняя версия документа;
+- нет удаления, поиска и версионирования содержимого;
+- нет LLM enrichment и embeddings.

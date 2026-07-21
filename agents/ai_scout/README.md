@@ -5,28 +5,49 @@ AI Scout — первый рабочий вертикальный срез Alpha
 ## Поток
 
 ```text
-Hacker News API
+Scheduler → SourceManager → HackerNewsCollector
       ↓
-HackerNewsCollector
+CollectionCompleted → KnowledgeHandler
       ↓
-CollectionCompleted
+KnowledgeStored → EnrichmentHandler
       ↓
-InMemoryEventBus
+KnowledgeEnriched → ScoringHandler
       ↓
-KnowledgeHandler
+ScoringCompleted → PublicationHandler
       ↓
-InMemoryKnowledgeRepository
+PublicationPolicy
+      ├─ rejected → PublicationRejected
+      ↓ accepted
+PublicationCandidateCreated → ConsolePublisher
+      ↓
+PublicationCompleted
 ```
 
-AIScout не вызывает Repository напрямую. Он публикует immutable событие, а подписанный `KnowledgeHandler` сохраняет уникальные записи. После обработки AIScout выводит статистику и материалы в консоль.
+После `ScoringCompleted` PublicationHandler применяет threshold policy. Только accepted-кандидаты передаются `ConsolePublisher`. Publisher не принимает решение и не вызывается для rejected score.
 
-## Запуск
+AIScout не вызывает Repository, Scoring Engine, Publication Engine или Publisher напрямую.
+
+Количество новых записей считается отдельным `PipelineStatsHandler`, подписанным на `KnowledgeStored`; внутренняя статистика KnowledgeHandler при этом сохраняется для диагностики.
+
+## Однократный запуск
 
 Из корня репозитория:
 
 ```bash
-python -m agents.ai_scout.agent
+python -m agents.ai_scout.agent --once
 ```
+
+Все enabled-источники запускаются по одному разу, pipeline полностью завершается, печатается статистика, после чего процесс останавливается.
+
+Статистика включает collected, stored, enriched, scored, accepted, rejected, successful publications и publication failures.
+
+## Режим сервиса
+
+```bash
+python -m agents.ai_scout.agent --serve
+```
+
+Scheduler ждёт ближайший `next_run_at` без busy loop и запускает SourceManager callback. Процесс работает до cancellation или `Ctrl+C`; запуск и остановка логируются.
 
 Для запуска необходим Python 3.11 или новее и исходящий HTTPS-доступ к `hacker-news.firebaseio.com`. Сторонние Python-зависимости не требуются.
 
@@ -46,6 +67,7 @@ python -m agents.ai_scout.agent
 - события и данные существуют только в памяти процесса;
 - нет PostgreSQL, Redis, LLM и отправки уведомлений;
 - нет retry, параллельной загрузки, rate limiting и постоянного расписания;
+- расписания и источники существуют только в памяти;
 - HTML и содержимое внешних страниц не загружаются и не парсятся.
 
 ## Тестирование

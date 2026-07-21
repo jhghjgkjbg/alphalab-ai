@@ -8,6 +8,7 @@ from urllib.request import Request, urlopen
 
 from core.collector.base import BaseCollector
 from core.collector.types import CollectorResult, CollectorStatus, SourceItem
+from agents.ai_scout.clients.hacker_news_client import HackerNewsClient
 
 
 FetchJson = Callable[[str, float], Any]
@@ -22,9 +23,13 @@ class HackerNewsCollector(BaseCollector):
         *,
         timeout: float = 5.0,
         fetch_json: FetchJson | None = None,
+        client: HackerNewsClient | None = None,
+        max_items: int | None = None,
     ) -> None:
         self._timeout = timeout
         self._fetch_json = fetch_json or self._default_fetch_json
+        self._client = client
+        self._max_items = max_items or self.STORY_LIMIT
 
     @classmethod
     def name(cls) -> str:
@@ -32,6 +37,28 @@ class HackerNewsCollector(BaseCollector):
 
     async def collect(self) -> CollectorResult:
         started_at = datetime.now(UTC)
+        if self._client is not None:
+            result = await self._client.fetch_top_stories(self._max_items)
+            finished_at = datetime.now(UTC)
+            if not result.success:
+                return CollectorResult(self.name(), CollectorStatus.FAILED, started_at, finished_at, errors=result.errors)
+            items = tuple(
+                SourceItem(
+                    source="hacker_news", external_id=str(item.id), collected_at=finished_at,
+                    payload={
+                        "title": item.title,
+                        "url": item.url or f"https://news.ycombinator.com/item?id={item.id}",
+                        "summary": item.text or "",
+                        "published_at": datetime.fromtimestamp(item.time, UTC) if item.time else None,
+                        "tags": ("hacker_news",),
+                        "author": item.by,
+                        "score": item.score,
+                    },
+                    metadata={"published_at": item.time, "tags": ("hacker_news",)},
+                )
+                for item in result.items
+            )
+            return CollectorResult(self.name(), CollectorStatus.SUCCESS, started_at, finished_at, items=items)
         items: list[SourceItem] = []
         errors: list[str] = []
 
