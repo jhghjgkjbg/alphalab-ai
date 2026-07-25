@@ -4,6 +4,8 @@ from fastapi.responses import HTMLResponse
 from fastapi.responses import PlainTextResponse, Response
 from html import escape
 import json, os
+from datetime import datetime, timezone
+from email.utils import format_datetime
 from urllib.parse import quote, unquote
 from fastapi.staticfiles import StaticFiles
 from core.api import PublishedArticlesStore
@@ -45,20 +47,9 @@ def create_app(store=None):
         for x in (store.latest(10000) if hasattr(store,"latest") else store._items): out[x.get("source","")]=out.get(x.get("source",""),0)+1
         return out
     @app.get("/", response_class=HTMLResponse)
-    def home(): return HTMLResponse(Path(__file__).with_name("index.html").read_text(encoding="utf-8"))
-    def language_feed(language: str):
-        rows = store.latest(10000) if hasattr(store, "latest") else list(store._items)
-        cards = []
-        for row in rows:
-            title = row.get(f"{language}_title") or row.get("title") or "Untitled"
-            summary = row.get(f"{language}_body") or row.get("summary") or ""
-            slug = row.get("publication_id") or row.get("id") or row.get("canonical_url") or row.get("url")
-            cards.append(f"<article><h2>{escape(str(title))}</h2><p>{escape(str(summary))}</p><small>{escape(str(row.get('source','')))} · {escape(str(row.get('created_at') or row.get('published_at') or ''))} · {language}</small><p><a href='/article/{quote(str(slug), safe='')}'>Read article</a></p></article>")
-        return HTMLResponse("<!doctype html><html><head><meta charset='utf-8'><link rel='stylesheet' href='/static/styles.css'><title>AI Scout</title></head><body><header class='site-header'><strong>AI Scout</strong><span>AI &amp; technology intelligence</span></header><main class='feed'><h1>AI Scout</h1>" + ("".join(cards) or "<p>No published articles yet</p>") + "</main></body></html>")
     @app.get("/en", response_class=HTMLResponse)
-    def english_feed(): return language_feed("en")
     @app.get("/ru", response_class=HTMLResponse)
-    def russian_feed(): return language_feed("ru")
+    def home(): return HTMLResponse(Path(__file__).with_name("index.html").read_text(encoding="utf-8"))
     def admin_guard(request):
         expected=os.getenv("ALPHALAB_ADMIN_TOKEN", "")
         if expected and request.headers.get("X-Admin-Token") != expected: raise HTTPException(401, "admin authentication required")
@@ -70,7 +61,7 @@ def create_app(store=None):
         admin_guard(request); rows=store.latest(10000) if hasattr(store,"latest") else list(store._items)
         if status: rows=[r for r in rows if str(r.get("status", "published")).casefold()==status.casefold()]
         rows.sort(key=lambda r:str(r.get("created_at") or r.get("published_at") or ""), reverse=True)
-        body="".join(f"<li><a href='/admin/publication/{quote(str(r.get('publication_id') or r.get('id')),safe='')}'>{escape(str(r.get('en_title') or r.get('title') or 'Untitled'))}</a> — {escape(str(r.get('source','')))} — {escape(str(r.get('status','published')))} — {escape(str(r.get('editorial_score',0)))}</li>" for r in rows)
+        body="".join(f"<li><a href='/admin/publication/{quote(str(r.get('publication_id') or r.get('id')),safe='')}'>{escape(str(r.get('en_title') or r.get('title') or 'Untitled'))}</a> вЂ” {escape(str(r.get('source','')))} вЂ” {escape(str(r.get('status','published')))} вЂ” {escape(str(r.get('editorial_score',0)))}</li>" for r in rows)
         return HTMLResponse(f"<!doctype html><html><head><link rel='stylesheet' href='/static/styles.css'><title>Publications</title></head><body><main><h1>Publications</h1><ul>{body or '<li>No publications</li>'}</ul></main></body></html>")
     @app.get("/admin/publication/{publication_id:path}", response_class=HTMLResponse)
     def admin_publication(request: Request, publication_id: str):
@@ -102,28 +93,76 @@ def create_app(store=None):
                     break
             if row: break
         if not row:
-            return HTMLResponse("<!doctype html><html><head><link rel='stylesheet' href='/static/styles.css'><title>Article not found — AI Scout</title></head><body><header class='site-header'><strong>AI Scout</strong><span>AI &amp; technology intelligence</span></header><main class='article-page'><article class='article-card'><h1>Article not found</h1><p>The requested article is unavailable.</p><a class='button secondary' href='/'>Back to feed</a></article></main></body></html>", status_code=404)
+            return HTMLResponse("<!doctype html><html><head><link rel='stylesheet' href='/static/styles.css'><title>Article not found вЂ” AI Scout</title></head><body><header class='site-header'><strong>AI Scout</strong><span>AI &amp; technology intelligence</span></header><main class='article-page'><article class='article-card'><h1>Article not found</h1><p>The requested article is unavailable.</p><a class='button secondary' href='/'>Back to feed</a></article></main></body></html>", status_code=404)
         base=os.getenv("ALPHALAB_PUBLIC_BASE_URL","http://127.0.0.1:8080").rstrip("/"); canonical=f"{base}/article/{quote(article_id,safe='') }"; title=str(row.get("en_title") or row.get("title") or "Untitled"); summary=str(row.get("en_body") or row.get("summary") or "")[:300]; url=str(row.get("source_url") or row.get("url") or ""); data={"@context":"https://schema.org","@type":"Article","headline":title,"description":summary,"datePublished":row.get("published_at") or row.get("created_at"),"mainEntityOfPage":canonical,"publisher":{"@type":"Organization","name":"AI Scout"}}
+        related_rows = store.latest(10000) if hasattr(store, "latest") else list(store._items)
+        current_keys = {str(row.get(field)) for field in ("id", "publication_id", "canonical_url", "url") if row.get(field)}
+        related = []
+        for candidate in related_rows:
+            candidate_keys = {str(candidate.get(field)) for field in ("id", "publication_id", "canonical_url", "url") if candidate.get(field)}
+            if current_keys & candidate_keys: continue
+            candidate_title = candidate.get("en_title") or candidate.get("title") or "Untitled"
+            candidate_slug = candidate.get("publication_id") or candidate.get("id") or candidate.get("canonical_url") or candidate.get("url")
+            if not candidate_slug: continue
+            candidate_date = candidate.get("published_at") or candidate.get("created_at") or ""
+            related.append(f"<article class='related-card'><h3>{escape(str(candidate_title))}</h3><small>{escape(str(candidate_date)[:10])}</small><a href='/article/{quote(str(candidate_slug), safe='')}'>Read article</a></article>")
+            if len(related) >= 4: break
+        related_html = "<section class='related-articles' aria-labelledby='related-title'><h2 id='related-title'>Related articles</h2><div class='related-grid'>" + "".join(related) + "</div></section>" if related else ""
+
         from urllib.parse import urlparse
         parsed=urlparse(url); original=(f"<a class='button primary' href='{escape(url,quote=True)}' target='_blank' rel='noopener noreferrer'>Original source</a>" if parsed.scheme in ('http','https') else '')
         category = f"<span class='badge'>{escape(str(row.get('category')))}</span>" if row.get('category') else ''; source=escape(str(row.get('source') or '')); score=float(row.get('score') or 0); score=int(score*100) if score<=1 else int(score); verdict=f"<span>{escape(str(row.get('editorial_verdict')))}</span>" if row.get('editorial_verdict') else ''
-        return HTMLResponse(f"<!doctype html><html><head><meta charset='utf-8'><link rel='stylesheet' href='/static/styles.css'><title>{escape(title)} — AI Scout</title><meta name='description' content='{escape(summary,quote=True)}'><link rel='canonical' href='{escape(canonical,quote=True)}'><meta property='og:type' content='article'><meta property='og:title' content='{escape(title,quote=True)}'><meta property='og:description' content='{escape(summary,quote=True)}'><meta property='og:url' content='{escape(canonical,quote=True)}'><meta property='og:site_name' content='AI Scout'><meta name='twitter:card' content='summary_large_image'><meta name='twitter:title' content='{escape(title,quote=True)}'><meta name='twitter:description' content='{escape(summary,quote=True)}'><script type='application/ld+json'>{json.dumps(data,ensure_ascii=False)}</script></head><body><header class='site-header'><strong>AI Scout</strong><span>AI &amp; technology intelligence</span></header><main class='article-page'><a class='back-link' href='/'>← Back to feed</a><article class='article-card'>{category}<span class='badge'>{source}</span><h1>{escape(title)}</h1><div class='meta'><span>{escape(str(row.get('published_at') or '')[:10])}</span><span>{escape(str(row.get('language') or ''))}</span><span class='score'>AI Scout score {score}/100</span>{verdict}</div><p class='article-summary'>{escape(summary)}</p><div class='article-actions'>{original}<a class='button secondary' href='/'>Back to feed</a></div></article></main><footer class='site-footer'>AI Scout · AI &amp; technology intelligence</footer></body></html>")
+        return HTMLResponse(f"<!doctype html><html><head><meta charset='utf-8'><link rel='stylesheet' href='/static/styles.css'><title>{escape(title)} вЂ” AI Scout</title><meta name='description' content='{escape(summary,quote=True)}'><link rel='canonical' href='{escape(canonical,quote=True)}'><meta property='og:type' content='article'><meta property='og:title' content='{escape(title,quote=True)}'><meta property='og:description' content='{escape(summary,quote=True)}'><meta property='og:url' content='{escape(canonical,quote=True)}'><meta property='og:site_name' content='AI Scout'><meta name='twitter:card' content='summary_large_image'><meta name='twitter:title' content='{escape(title,quote=True)}'><meta name='twitter:description' content='{escape(summary,quote=True)}'><script type='application/ld+json'>{json.dumps(data,ensure_ascii=False)}</script></head><body><header class='site-header'><strong>AI Scout</strong><span>AI &amp; technology intelligence</span></header><main class='article-page'><a class='back-link' href='/'>в†ђ Back to feed</a><article class='article-card'>{category}<span class='badge'>{source}</span><h1>{escape(title)}</h1><div class='meta'><span>{escape(str(row.get('published_at') or '')[:10])}</span><span>{escape(str(row.get('language') or ''))}</span><span class='score'>AI Scout score {score}/100</span>{verdict}</div><p class='article-summary'>{escape(summary)}</p><div class='article-actions'>{original}<a class='button secondary' href='/'>Back to feed</a></div></article>{related_html}</main><footer class='site-footer'>AI Scout В· AI &amp; technology intelligence</footer></body></html>")
     @app.get("/robots.txt", response_class=PlainTextResponse)
     def robots(): return f"User-agent: *\nAllow: /\n\nSitemap: {os.getenv('ALPHALAB_PUBLIC_BASE_URL','http://127.0.0.1:8080').rstrip('/')}/sitemap.xml\n"
     @app.get("/sitemap.xml")
     def sitemap():
-        base=os.getenv("ALPHALAB_PUBLIC_BASE_URL","http://127.0.0.1:8080").rstrip("/"); rows=store.latest(5000) if hasattr(store,"latest") else store._items; urls=[f"<url><loc>{escape(base+'/')}</loc></url>"]+[f"<url><loc>{escape(base+'/article/'+quote(str(x.get('id')),safe=''))}</loc><lastmod>{escape(str(x.get('published_at','')))}</lastmod></url>" for x in rows]; return Response('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+''.join(urls)+"</urlset>",media_type="application/xml")
-    def rss(language=None):
-        rows = store.latest(100) if hasattr(store, "latest") else list(store._items)
-        base=os.getenv("ALPHALAB_PUBLIC_BASE_URL","http://127.0.0.1:8080").rstrip("/")
-        items=[]
+        base = os.getenv("ALPHALAB_PUBLIC_BASE_URL", "http://127.0.0.1:8080").rstrip("/")
+        rows = store.latest(5000) if hasattr(store, "latest") else list(store._items)
+        urls = [f"<url><loc>{escape(base + '/')}</loc></url>"]
         for row in rows:
-            title=row.get(f"{language}_title") if language else row.get("title")
-            summary=row.get(f"{language}_body") if language else row.get("summary")
-            title=title or row.get("title") or "Untitled"; summary=summary or row.get("summary") or ""
-            url=row.get("source_url") or row.get("url") or ""; slug=row.get("publication_id") or row.get("id") or row.get("canonical_url") or url
-            items.append(f"<item><title>{escape(str(title))}</title><description>{escape(str(summary))}</description><link>{escape(base+'/article/'+quote(str(slug),safe=''))}</link><guid>{escape(str(row.get('canonical_url') or url))}</guid><pubDate>{escape(str(row.get('created_at') or row.get('published_at') or ''))}</pubDate></item>")
-        return Response('<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>AI Scout</title><link>'+escape(base)+'</link>'+''.join(items)+'</channel></rss>',media_type="application/rss+xml")
+            slug = row.get("publication_id") or row.get("id") or row.get("canonical_url") or row.get("url")
+            if not slug:
+                continue
+            article_url = base + "/article/" + quote(str(slug), safe="")
+            lastmod = row.get("published_at") or row.get("created_at")
+            lastmod_xml = f"<lastmod>{escape(str(lastmod))}</lastmod>" if lastmod else ""
+            urls.append(f"<url><loc>{escape(article_url)}</loc>{lastmod_xml}</url>")
+        xml = '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + "".join(urls) + "</urlset>"
+        return Response(xml, media_type="application/xml")
+    def rss(language=None):
+        def rss_date(value):
+            if not value:
+                return None
+            try:
+                parsed = datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                return format_datetime(parsed.astimezone(timezone.utc), usegmt=False)
+            except (TypeError, ValueError, OverflowError):
+                return None
+
+        rows = store.latest(50) if hasattr(store, "latest") else list(store._items)[:50]
+        base = os.getenv("ALPHALAB_PUBLIC_BASE_URL", "http://127.0.0.1:8080").rstrip("/")
+        items = []
+        for row in rows:
+            title = row.get(f"{language}_title") if language else row.get("title")
+            summary = row.get(f"{language}_body") if language else row.get("summary")
+            title = title or row.get("title") or "Untitled"
+            summary = summary or row.get("summary") or row.get("en_body") or row.get("body") or ""
+            summary = str(summary).strip()[:500]
+            slug = row.get("publication_id") or row.get("id") or row.get("canonical_url") or row.get("url")
+            published = row.get("published_at") or row.get("created_at")
+            pub_date = rss_date(published)
+            if not slug:
+                continue
+            article_url = base + "/article/" + quote(str(slug), safe="")
+            pub_date_xml = f"<pubDate>{escape(pub_date)}</pubDate>" if pub_date else ""
+            items.append(f"<item><title>{escape(str(title))}</title><link>{escape(article_url)}</link><guid isPermaLink=\"true\">{escape(article_url)}</guid>{pub_date_xml}<description>{escape(summary)}</description></item>")
+        channel_title = "AlphaLab AI"
+        description = "AI news and analysis"
+        xml = '<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>' + channel_title + '</title><link>' + escape(base) + '</link><description>' + description + '</description><language>en</language>' + "".join(items) + '</channel></rss>'
+        return Response(xml, media_type="application/rss+xml")
     @app.get("/rss")
     def rss_all(): return rss()
     @app.get("/en/rss")
