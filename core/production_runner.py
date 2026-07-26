@@ -63,7 +63,7 @@ class ProductionRunner:
             translation = getattr(context, "translation", "") or ""
             ru_title = getattr(context, "ru_title", "") or ""
             ru_body = getattr(context, "ru_body", "") or ""
-            variants = {lang: replace(v, title=(title if lang != "ru" else (ru_title or v.title)), summary=(summary if lang != "ru" else (ru_body or v.summary)), body=(summary if lang != "ru" else (ru_body or v.body))) for lang, v in publication.variants.items()}
+            variants = {lang: replace(v, title=(title if lang != "ru" else (ru_title or v.title)), summary=(summary if lang != "ru" else (ru_body or v.summary)), body=((v.body or summary or publication.summary) if lang != "ru" else (ru_body or v.body or v.summary))) for lang, v in publication.variants.items()}
             publication = replace(publication, title=title, summary=summary, variants=variants)
         # Channel eligibility is evaluated after enrichment and variant
         # materialization, so RU eligibility can use the actual publication.

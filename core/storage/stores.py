@@ -5,9 +5,12 @@ from dataclasses import fields, is_dataclass
 
 def _publication_mapping(article):
     if isinstance(article, dict): return article
-    names = ("id", "publication_id", "article_id", "title", "summary", "url", "canonical_url", "source", "category", "language", "published_at", "score", "trend_bonus", "reputation", "editorial_score", "editorial_verdict")
+    names = ("id", "publication_id", "article_id", "title", "summary", "url", "canonical_url", "source", "category", "language", "published_at", "score", "trend_bonus", "reputation", "editorial_score", "editorial_verdict", "en_body")
     data = {name: getattr(article, name, None) for name in names if hasattr(article, name)}
     variants = getattr(article, "variants", {}) or {}
+    if "en_body" not in data:
+        english = variants.get("en") if isinstance(variants, dict) else None
+        data["en_body"] = getattr(english, "body", None) or getattr(article, "body", None) or getattr(article, "summary", "")
     if "title" not in data and variants:
         variant = variants.get(getattr(article, "language", "en")) or next(iter(variants.values()))
         data["title"], data["summary"] = getattr(variant, "title", ""), getattr(variant, "summary", "")
@@ -22,14 +25,16 @@ class SQLitePublishedArticlesStore:
             if existing is not None:
                 incomplete = not str(existing["summary"] or "").strip() and (existing["score"] is None or float(existing["score"] or 0) == 0.0)
                 if incomplete:
-                    c.execute("UPDATE published_articles SET published_at=?,title=?,summary=?,url=?,canonical_url=?,source=?,category=?,language=?,score=?,trend_bonus=?,reputation=?,editorial_score=?,editorial_verdict=?,updated_at=? WHERE id=?", (d.get('published_at') or now, d.get('title',''), d.get('summary',''), url, url, d.get('source',''), d.get('category',''), d.get('language','en'), float(d.get('score',0)), float(d.get('trend_bonus',0)), float(d.get('reputation',0)), int(d.get('editorial_score',0)), d.get('editorial_verdict',''), now, existing["id"]))
+                    c.execute("UPDATE published_articles SET published_at=?,title=?,summary=?,en_body=?,url=?,canonical_url=?,source=?,category=?,language=?,score=?,trend_bonus=?,reputation=?,editorial_score=?,editorial_verdict=?,updated_at=? WHERE id=?", (d.get('published_at') or now, d.get('title',''), d.get('summary',''), d.get('en_body') or d.get('summary',''), url, url, d.get('source',''), d.get('category',''), d.get('language','en'), float(d.get('score',0)), float(d.get('trend_bonus',0)), float(d.get('reputation',0)), int(d.get('editorial_score',0)), d.get('editorial_verdict',''), now, existing["id"]))
                     return d
                 return None
-            cur=c.execute("INSERT OR IGNORE INTO published_articles(id,published_at,title,summary,url,canonical_url,source,category,language,score,trend_bonus,reputation,editorial_score,editorial_verdict,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(aid,d.get('published_at') or now,d.get('title',''),d.get('summary',''),url,url,d.get('source',''),d.get('category',''),d.get('language','en'),float(d.get('score',0)),float(d.get('trend_bonus',0)),float(d.get('reputation',0)),int(d.get('editorial_score',0)),d.get('editorial_verdict',''),now,now))
+            cur=c.execute("INSERT OR IGNORE INTO published_articles(id,published_at,title,summary,en_body,url,canonical_url,source,category,language,score,trend_bonus,reputation,editorial_score,editorial_verdict,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",(aid,d.get('published_at') or now,d.get('title',''),d.get('summary',''),d.get('en_body') or d.get('summary',''),url,url,d.get('source',''),d.get('category',''),d.get('language','en'),float(d.get('score',0)),float(d.get('trend_bonus',0)),float(d.get('reputation',0)),int(d.get('editorial_score',0)),d.get('editorial_verdict',''),now,now))
             if not cur.rowcount:return None
             c.execute("DELETE FROM published_articles WHERE id IN (SELECT id FROM published_articles ORDER BY published_at DESC LIMIT -1 OFFSET ?)",(self.max_records,)); return d
     def contains(self,article_id=None,url=None):
-        with self.database.connect() as c:return c.execute("SELECT 1 FROM published_articles WHERE id=? OR canonical_url=? LIMIT 1",(article_id or '',url or '')).fetchone() is not None
+        with self.database.connect() as c:
+            row = c.execute("SELECT summary,score FROM published_articles WHERE id=? OR canonical_url=? LIMIT 1", (article_id or '', url or '')).fetchone()
+            return row is not None and bool(str(row["summary"] or "").strip() or float(row["score"] or 0))
     def latest(self,limit=50):
         with self.database.connect() as c:return [dict(r) for r in c.execute("SELECT * FROM published_articles ORDER BY published_at DESC LIMIT ?",(limit,))]
     def search(self,query,limit=50):

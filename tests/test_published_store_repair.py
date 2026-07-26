@@ -12,7 +12,8 @@ class PublishedStoreRepairTests(unittest.TestCase):
         self.store = SQLitePublishedArticlesStore(SQLiteDatabase(Path(self.tmp.name) / "repair.db"))
 
     def tearDown(self):
-        self.store.database.connect().close()
+        with self.store.database.connect():
+            pass
         self.store = None
         gc.collect()
         self.tmp.cleanup()

@@ -39,6 +39,8 @@ def create_app(store=None):
             store = SQLitePublishedArticlesStore()
         except Exception:
             store = PublishedArticlesStore(path=root / "runtime" / "published_articles.json")
+    def _api_row(row):
+        return {key: value for key, value in row.items() if key != "en_body"}
     @app.get("/api/health")
     def health(): return {"status":"ok","articles":store.count() if hasattr(store,"count") else len(store._items),"storage":"sqlite" if hasattr(store,"database") else "json"}
     @app.get("/api/articles")
@@ -49,11 +51,11 @@ def create_app(store=None):
         if language: rows=[x for x in rows if x.get("language","").casefold()==language.casefold()]
         if sort=="score": rows.sort(key=lambda x: float(x.get("score",0)), reverse=True)
         total=len(rows); start=(page-1)*limit
-        return {"items":rows[start:start+limit],"page":page,"limit":limit,"total":total,"pages":(total+limit-1)//limit}
+        return {"items":[_api_row(row) for row in rows[start:start+limit]],"page":page,"limit":limit,"total":total,"pages":(total+limit-1)//limit}
     @app.get("/api/articles/{article_id}")
     def article(article_id:str):
         for row in (store.latest(10000) if hasattr(store,"latest") else store._items):
-            if str(row.get("id"))==article_id: return row
+            if str(row.get("id"))==article_id: return _api_row(row)
         raise HTTPException(404,"article not found")
     @app.get("/api/categories")
     def categories():

@@ -13,10 +13,11 @@ from core.ai_enrichment.types import AIContext
 
 
 class _Publisher:
-    def __init__(self, channel, chat_id, trace): self.channel, self.chat_id, self.trace = channel, chat_id, trace
+    def __init__(self, channel, chat_id, trace): self.channel, self.chat_id, self.events, self.trace = channel, chat_id, trace, []
     async def publish(self, view):
-        self.trace.append((self.channel, id(self), self.chat_id, view.language, view.title, view.text, len(view.text)))
-        return SimpleNamespace(success=True, message_id=len(self.trace))
+        event = (self.channel, id(self), self.chat_id, view.language, view.title, view.text, len(view.text))
+        self.events.append(event); self.trace.append(event)
+        return SimpleNamespace(success=True, message_id=len(self.events))
 
 
 class _AI:
@@ -34,7 +35,8 @@ class _Website:
 
 class ExactProductionPathTests(unittest.TestCase):
     def _run(self, legacy=False):
-        with tempfile.TemporaryDirectory() as td:
+        td = tempfile.mkdtemp()
+        try:
             store = SQLitePublishedArticlesStore(SQLiteDatabase(Path(td) / "test.db"))
             item = SimpleNamespace(external_id="unique-article", source="test", payload={"title":"Original", "summary":"Original summary", "url":"https://example.test/unique", "category":"AI", "published_at":"2026-07-21T00:00:00+00:00"})
             if legacy: store.append({"id":"unique-article", "title":"Original", "summary":"", "url":"https://example.test/unique", "score":0})
@@ -43,15 +45,26 @@ class ExactProductionPathTests(unittest.TestCase):
             root=SimpleNamespace(builder=PublicationBuilder(), articles_store=store, ai_enrichment_engine=ai, delivery_orchestrator=delivery)
             result=asyncio.run(ProductionRunner(composition_root=root, confirm_send=True).run([item]))
             print("exact production trace:", trace)
-            return result, ai, en, ru, store
+            return result, ai, en, ru, store, td
+        except Exception:
+            import shutil
+            shutil.rmtree(td, ignore_errors=True)
+            raise
 
     def test_exact_path_sends_each_channel_once_and_persists_enriched_row(self):
-        result, ai, en, ru, store = self._run()
-        self.assertEqual(ai.calls, 1); self.assertEqual(result.delivery.overall, "sent")
-        self.assertEqual(len(en.trace), 1); self.assertEqual(len(ru.trace), 1)
-        rows=store.latest(); self.assertEqual(len(rows), 1); self.assertTrue(rows[0]["summary"]); self.assertGreater(rows[0]["score"], 0)
+        result, ai, en, ru, store, td = self._run()
+        try:
+            self.assertEqual(ai.calls, 1); self.assertEqual(result.delivery.overall, "sent")
+            self.assertEqual(len(en.trace), 1); self.assertEqual(len(ru.trace), 1)
+            rows=store.latest(); self.assertEqual(len(rows), 1); self.assertTrue(rows[0]["summary"]); self.assertGreater(rows[0]["score"], 0)
+        finally:
+            import shutil
+            shutil.rmtree(td, ignore_errors=True)
 
     def test_legacy_incomplete_row_is_not_treated_as_final_content(self):
-        result, ai, en, ru, store = self._run(legacy=True)
-        rows=store.latest(); self.assertEqual(len(rows), 1); self.assertTrue(rows[0]["summary"]); self.assertGreater(rows[0]["score"], 0)
-
+        result, ai, en, ru, store, td = self._run(legacy=True)
+        try:
+            rows=store.latest(); self.assertEqual(len(rows), 1); self.assertTrue(rows[0]["summary"]); self.assertGreater(rows[0]["score"], 0)
+        finally:
+            import shutil
+            shutil.rmtree(td, ignore_errors=True)

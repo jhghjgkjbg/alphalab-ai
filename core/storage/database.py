@@ -1,13 +1,23 @@
 import sqlite3
 import json
+from contextlib import contextmanager
 from pathlib import Path
 from datetime import datetime, UTC
 
 class SQLiteDatabase:
     def __init__(self, path=None, timeout=30):
         self.path=Path(path) if path else Path(__file__).resolve().parents[2]/"runtime"/"ai_scout.db"; self.path.parent.mkdir(parents=True, exist_ok=True); self.timeout=timeout; self.migrate()
+    @contextmanager
     def connect(self):
-        c=sqlite3.connect(self.path, timeout=self.timeout); c.row_factory=sqlite3.Row; c.execute("PRAGMA foreign_keys=ON"); c.execute("PRAGMA journal_mode=WAL"); return c
+        c=sqlite3.connect(self.path, timeout=self.timeout); c.row_factory=sqlite3.Row
+        try:
+            c.execute("PRAGMA foreign_keys=ON"); c.execute("PRAGMA journal_mode=WAL"); yield c
+            c.commit()
+        except Exception:
+            c.rollback()
+            raise
+        finally:
+            c.close()
     def migrate(self):
         with self.connect() as c:
             c.executescript("""
@@ -22,6 +32,16 @@ class SQLiteDatabase:
             CREATE TABLE IF NOT EXISTS analytics_categories(category TEXT PRIMARY KEY,published INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS analytics_daily(day TEXT PRIMARY KEY,received INTEGER NOT NULL DEFAULT 0,published INTEGER NOT NULL DEFAULT 0,rejected INTEGER NOT NULL DEFAULT 0,editorial_calls INTEGER NOT NULL DEFAULT 0,translation_calls INTEGER NOT NULL DEFAULT 0,duplicates INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL);
             """)
+            columns = {row[1] for row in c.execute("PRAGMA table_info(published_articles)")}
+            if "en_body" not in columns:
+                try:
+                    c.execute("ALTER TABLE published_articles ADD COLUMN en_body TEXT NOT NULL DEFAULT ''")
+                except sqlite3.OperationalError as exc:
+                    if "duplicate column name" not in str(exc).lower() or "en_body" not in str(exc).lower():
+                        raise
+                    columns = {row[1] for row in c.execute("PRAGMA table_info(published_articles)")}
+                    if "en_body" not in columns:
+                        raise
             c.execute("INSERT OR IGNORE INTO schema_migrations VALUES(1,?)",(datetime.now(UTC).isoformat(),))
     def version(self):
         with self.connect() as c: return c.execute("SELECT COALESCE(MAX(version),0) FROM schema_migrations").fetchone()[0]

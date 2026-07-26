@@ -1,4 +1,5 @@
 import asyncio
+from html.parser import HTMLParser
 from collections.abc import Callable
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
@@ -13,6 +14,49 @@ from core.collector.types import CollectorResult, CollectorStatus, SourceItem
 
 
 FeedLoader = Callable[[str, float, int], bytes]
+
+
+class _TextParser(HTMLParser):
+    _BLOCKS = {"p", "div", "br", "li", "article", "section", "h1", "h2", "h3", "h4", "tr"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self._ignored = 0
+
+    def handle_starttag(self, tag, attrs):
+        tag = tag.lower()
+        if tag in {"script", "style"}:
+            self._ignored += 1
+        elif not self._ignored and tag in {"a", "span", "strong", "b", "em", "i", "u", "small", "code"} and self.parts and not self.parts[-1].endswith((" ", "\n")):
+            self.parts.append(" ")
+        elif not self._ignored and tag in self._BLOCKS:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag):
+        tag = tag.lower()
+        if tag in {"script", "style"} and self._ignored:
+            self._ignored -= 1
+        elif not self._ignored and tag in self._BLOCKS:
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        if not self._ignored and data:
+            self.parts.append(data)
+
+
+def normalize_rss_text(value: str | None) -> str:
+    if not value:
+        return ""
+    parser = _TextParser()
+    try:
+        parser.feed(str(value))
+        parser.close()
+        text = "".join(parser.parts)
+    except Exception:
+        text = str(value)
+    lines = [" ".join(line.split()) for line in text.splitlines()]
+    return "\n".join(line for line in lines if line)
 
 
 class RSSCollector(BaseCollector):
@@ -103,7 +147,7 @@ class RSSCollector(BaseCollector):
             source="rss",
             external_id=external_id,
             collected_at=datetime.now(UTC),
-            payload={"title": title, "url": link, "content": content},
+            payload={"title": title, "url": link, "content": normalize_rss_text(content)},
             metadata={"author": author, "published_at": published_at},
         )
 
