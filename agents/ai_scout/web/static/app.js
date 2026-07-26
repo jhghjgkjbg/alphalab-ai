@@ -1,8 +1,6 @@
 (() => {
-  const currentPath = location.pathname === '/en' ? '/en' : location.pathname === '/ru' ? '/ru' : '/';
-  const currentLanguage = currentPath === '/en' ? 'en' : currentPath === '/ru' ? 'ru' : '';
   document.querySelectorAll('.site-nav a').forEach(link => {
-    if (link.getAttribute('href') === currentPath) link.classList.add('active');
+    if (link.getAttribute('href') === '/') link.classList.add('active');
   });
   const state = { page: 1, limit: 12, controller: null, requestId: 0, searchTimer: null };
   const $ = id => document.getElementById(id);
@@ -15,20 +13,12 @@
     more.disabled = true; list.setAttribute('aria-busy', 'true'); status.textContent = 'Loading articles…';
     const p = new URLSearchParams({ page: state.page, limit: state.limit, sort: $('sort').value });
     const q = $('search').value.trim(); if (q) p.set('q', q);
-    if (currentLanguage) p.set('language', currentLanguage);
     if ($('category').value) p.set('category', $('category').value);
     if ($('source').value) p.set('source', $('source').value);
     try {
       const r = await fetch('/api/articles?' + p, { signal: controller.signal });
       if (!r.ok) throw Error('API request failed');
-      let d = await r.json();
-      if (currentLanguage === 'ru' && !d.total) {
-        const fallbackParams = new URLSearchParams(p);
-        fallbackParams.delete('language');
-        const fallbackResponse = await fetch('/api/articles?' + fallbackParams, { signal: controller.signal });
-        if (!fallbackResponse.ok) throw Error('API request failed');
-        d = await fallbackResponse.json();
-      }
+      const d = await r.json();
       if (requestId !== state.requestId) return;
       if (reset && !d.total) { const e = document.createElement('div'); e.className = 'empty'; const h = document.createElement('h2'); h.textContent = 'No published articles yet'; const x = document.createElement('p'); x.textContent = 'Run the AI Scout pipeline to publish the first article.'; e.append(h, x); list.append(e); }
       else if (!d.items.length) status.textContent = 'No results';
