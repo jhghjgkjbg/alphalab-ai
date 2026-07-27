@@ -994,8 +994,25 @@ async def main(argv: list[str] | None = None) -> None:
         return
     if args.production_run:
         from core.production_runner import ProductionRunner
+        from dataclasses import replace
+        from core.publication.builder import PublicationBuilder
+        from core.ranking import RankingEngineV1
+        from core.scoring.engine import ScoringEngine
+        from core.scoring.types import ScoringRequest
         results = await AIScout()._source_manager.run_enabled()
         items = [i for r in results for i in r.items if isinstance(getattr(i, "payload", None), dict) and i.payload.get("title")]
+        # Reuse the existing deterministic ranking and scoring components before
+        # the production runner builds the selected Publication.  The score is
+        # carried on the SourceItem payload for PublicationBuilder compatibility.
+        ranking = RankingEngineV1()
+        scoring = ScoringEngine()
+        scored_items = []
+        for item in items:
+            publication = ranking.rank(PublicationBuilder().build(item))
+            scored_items.append((item, publication.ranking_score))
+        scored = scoring.score_items([ScoringRequest(item, ranking_score=score) for item, score in scored_items])
+        score_by_id = {id(result.item): result.final_score for result in scored.items}
+        items = [replace(item, payload={**item.payload, "score": score_by_id.get(id(item), 0.0)}) for item, _ in scored_items]
         try:
             from core.publication.composition import PublicationCompositionRoot
             composition_root = PublicationCompositionRoot.from_settings(settings)
