@@ -5,6 +5,8 @@ from core.editorial import (EditorialPlanner, FactExtractor, StoryAngleSelector,
 from core.renderers.website import WebsiteRenderer
 from core.renderers.telegram import TelegramRenderer
 from core.delivery import DeliveryOrchestrator, DeliveryPlan, DeliveryReport
+from core.dedup import DedupEngine
+from core.dedup.normalize import normalize_url
 
 
 @dataclass(frozen=True)
@@ -41,9 +43,46 @@ class ProductionRunner:
         winner = max(items, key=score)
         return getattr(winner, "item", winner)
 
+    @staticmethod
+    def _batch_deduplicate(items):
+        engine = DedupEngine()
+        unique, groups, _ = engine.deduplicate(items)
+        # Keep the existing URL/title normalization, but do not suppress
+        # distinct URLs merely because their titles match.
+        kept = list(unique)
+        for group in groups:
+            by_url = {}
+            for item in group.items:
+                url = normalize_url(str(getattr(item, "payload", {}).get("url", "")))
+                if url:
+                    by_url.setdefault(url, []).append(item)
+            if len(by_url) > 1:
+                for item in group.items:
+                    if item in kept:
+                        kept.remove(item)
+                for candidates in by_url.values():
+                    kept.append(candidates[0])
+                for item in group.items:
+                    if not normalize_url(str(getattr(item, "payload", {}).get("url", ""))):
+                        kept.append(item)
+        return tuple(kept)
+
+    def _published_filter(self, items):
+        if self.store is None or not hasattr(self.store, "contains"):
+            return tuple(items)
+        result = []
+        for item in items:
+            payload = getattr(item, "payload", {}) or {}
+            article_id = str(getattr(item, "external_id", None) or payload.get("article_id") or payload.get("id") or "")
+            url = str(payload.get("url") or "")
+            if not self.store.contains(article_id, url):
+                result.append(item)
+        return tuple(result)
+
     async def run(self, items):
         metrics = PipelineMetricsCollector(); stages = {}
-        if not items: raise ValueError("no candidates")
+        items = self._published_filter(self._batch_deduplicate(items))
+        if not items: raise ValueError("no new candidates")
         metrics.count("candidates_collected", len(items)); stages["collector"] = "ok"
         publication = self.builder.build(self._select_best_candidate(items)); stages["dedup"] = "ok"
         facts = FactExtractor().extract(publication); angle = StoryAngleSelector().select(publication); audience = AudienceSelector().select(publication)
