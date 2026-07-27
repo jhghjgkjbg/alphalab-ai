@@ -1,10 +1,62 @@
 from typing import Literal
+from datetime import datetime, UTC
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    publish_at: datetime | None = Field(default=None, validation_alias=AliasChoices("ALPHALAB_PUBLISH_AT", "publish_at"))
+
+    @field_validator("publish_at")
+    @classmethod
+    def _publish_at_must_be_aware(cls, value):
+        if value is not None and value.tzinfo is None:
+            raise ValueError("publish_at must include timezone offset")
+        return value.astimezone(UTC) if value is not None else None
+    public_base_url: str = Field(default="https://alphalabai.online", validation_alias=AliasChoices("ALPHALAB_PUBLIC_BASE_URL", "PUBLIC_BASE_URL", "public_base_url"))
+    telegram_max_attempts: int = Field(default=3, validation_alias=AliasChoices("ALPHALAB_TELEGRAM_MAX_ATTEMPTS", "TELEGRAM_MAX_ATTEMPTS", "telegram_max_attempts"))
+    telegram_retry_base_seconds: float = Field(default=1.0, validation_alias=AliasChoices("ALPHALAB_TELEGRAM_RETRY_BASE_SECONDS", "TELEGRAM_RETRY_BASE_SECONDS", "telegram_retry_base_seconds"))
+    telegram_retry_max_seconds: float = Field(default=15.0, validation_alias=AliasChoices("ALPHALAB_TELEGRAM_RETRY_MAX_SECONDS", "TELEGRAM_RETRY_MAX_SECONDS", "telegram_retry_max_seconds"))
+    x_enabled: bool = Field(default=False, validation_alias=AliasChoices("ALPHALAB_X_ENABLED", "x_enabled"))
+    x_bearer_token: str = Field(default="", validation_alias=AliasChoices("ALPHALAB_X_BEARER_TOKEN", "x_bearer_token"))
+    x_api_base_url: str = Field(default="https://api.x.com", validation_alias=AliasChoices("ALPHALAB_X_API_BASE_URL", "x_api_base_url"))
+    x_request_timeout_seconds: int = Field(default=10, validation_alias=AliasChoices("ALPHALAB_X_REQUEST_TIMEOUT_SECONDS", "x_request_timeout_seconds"))
+    linkedin_enabled: bool = Field(default=False, validation_alias=AliasChoices("ALPHALAB_LINKEDIN_ENABLED", "linkedin_enabled"))
+    linkedin_access_token: str = Field(default="", validation_alias=AliasChoices("ALPHALAB_LINKEDIN_ACCESS_TOKEN", "linkedin_access_token"))
+    linkedin_author_urn: str = Field(default="", validation_alias=AliasChoices("ALPHALAB_LINKEDIN_AUTHOR_URN", "linkedin_author_urn"))
+    linkedin_api_base_url: str = Field(default="https://api.linkedin.com", validation_alias=AliasChoices("ALPHALAB_LINKEDIN_API_BASE_URL", "linkedin_api_base_url"))
+    linkedin_api_version: str = Field(default="202601", validation_alias=AliasChoices("ALPHALAB_LINKEDIN_API_VERSION", "linkedin_api_version"))
+    linkedin_request_timeout_seconds: int = Field(default=10, validation_alias=AliasChoices("ALPHALAB_LINKEDIN_REQUEST_TIMEOUT_SECONDS", "linkedin_request_timeout_seconds"))
+    medium_enabled: bool = Field(default=False, validation_alias=AliasChoices("ALPHALAB_MEDIUM_ENABLED", "medium_enabled"))
+    medium_integration_token: str = Field(default="", validation_alias=AliasChoices("ALPHALAB_MEDIUM_INTEGRATION_TOKEN", "medium_integration_token"))
+    medium_author_id: str = Field(default="", validation_alias=AliasChoices("ALPHALAB_MEDIUM_AUTHOR_ID", "medium_author_id"))
+    medium_api_base_url: str = Field(default="https://api.medium.com", validation_alias=AliasChoices("ALPHALAB_MEDIUM_API_BASE_URL", "medium_api_base_url"))
+    medium_request_timeout_seconds: int = Field(default=10, validation_alias=AliasChoices("ALPHALAB_MEDIUM_REQUEST_TIMEOUT_SECONDS", "medium_request_timeout_seconds"))
+    medium_publish_status: str = Field(default="draft", validation_alias=AliasChoices("ALPHALAB_MEDIUM_PUBLISH_STATUS", "medium_publish_status"))
+    substack_enabled: bool = Field(default=False, validation_alias=AliasChoices("ALPHALAB_SUBSTACK_ENABLED", "substack_enabled"))
+    substack_outbox_directory: str = Field(default="runtime/substack_outbox", validation_alias=AliasChoices("ALPHALAB_SUBSTACK_OUTBOX_DIRECTORY", "substack_outbox_directory"))
+    substack_publication_url: str = Field(default="", validation_alias=AliasChoices("ALPHALAB_SUBSTACK_PUBLICATION_URL", "substack_publication_url"))
+    substack_default_audience: str = Field(default="everyone", validation_alias=AliasChoices("ALPHALAB_SUBSTACK_DEFAULT_AUDIENCE", "substack_default_audience"))
+    devto_enabled: bool = Field(default=False, validation_alias=AliasChoices("ALPHALAB_DEVTO_ENABLED", "devto_enabled"))
+    devto_api_key: str = Field(default="", validation_alias=AliasChoices("ALPHALAB_DEVTO_API_KEY", "devto_api_key"))
+    devto_api_base_url: str = Field(default="https://dev.to", validation_alias=AliasChoices("ALPHALAB_DEVTO_API_BASE_URL", "devto_api_base_url"))
+    devto_request_timeout_seconds: int = Field(default=10, validation_alias=AliasChoices("ALPHALAB_DEVTO_REQUEST_TIMEOUT_SECONDS", "devto_request_timeout_seconds"))
+    devto_publish: bool = Field(default=False, validation_alias=AliasChoices("ALPHALAB_DEVTO_PUBLISH", "devto_publish"))
+    devto_organization_id: int | None = Field(default=None, validation_alias=AliasChoices("ALPHALAB_DEVTO_ORGANIZATION_ID", "devto_organization_id"))
+    hashnode_enabled: bool = Field(default=False, validation_alias=AliasChoices("ALPHALAB_HASHNODE_ENABLED", "hashnode_enabled"))
+    hashnode_personal_access_token: str = Field(default="", repr=False, validation_alias=AliasChoices("ALPHALAB_HASHNODE_PERSONAL_ACCESS_TOKEN", "hashnode_personal_access_token"))
+    hashnode_publication_id: str = Field(default="", validation_alias=AliasChoices("ALPHALAB_HASHNODE_PUBLICATION_ID", "hashnode_publication_id"))
+    hashnode_api_url: str = Field(default="https://gql-beta.hashnode.com/", validation_alias=AliasChoices("ALPHALAB_HASHNODE_API_URL", "hashnode_api_url"))
+    hashnode_request_timeout_seconds: int = Field(default=10, validation_alias=AliasChoices("ALPHALAB_HASHNODE_REQUEST_TIMEOUT_SECONDS", "hashnode_request_timeout_seconds"))
+    hashnode_publish: bool = Field(default=False, validation_alias=AliasChoices("ALPHALAB_HASHNODE_PUBLISH", "hashnode_publish"))
+    hashnode_require_pro: bool = Field(default=True, validation_alias=AliasChoices("ALPHALAB_HASHNODE_REQUIRE_PRO", "hashnode_require_pro"))
+    reddit_enabled: bool = Field(default=False, validation_alias=AliasChoices("ALPHALAB_REDDIT_ENABLED", "reddit_enabled"))
+    reddit_outbox_directory: str = Field(default="runtime/reddit_outbox", validation_alias=AliasChoices("ALPHALAB_REDDIT_OUTBOX_DIRECTORY", "reddit_outbox_directory"))
+    reddit_subreddit: str = Field(default="", validation_alias=AliasChoices("ALPHALAB_REDDIT_SUBREDDIT", "reddit_subreddit"))
+    reddit_post_kind: str = Field(default="self", validation_alias=AliasChoices("ALPHALAB_REDDIT_POST_KIND", "reddit_post_kind"))
+    reddit_include_tracking: bool = Field(default=False, validation_alias=AliasChoices("ALPHALAB_REDDIT_INCLUDE_TRACKING", "reddit_include_tracking"))
+    reddit_require_manual_rule_review: bool = Field(default=True, validation_alias=AliasChoices("ALPHALAB_REDDIT_REQUIRE_MANUAL_RULE_REVIEW", "reddit_require_manual_rule_review"))
     app_name: str = "AlphaLab AI"
     app_version: str = "0.1.0"
     environment: Literal["development", "test", "production"] = "development"

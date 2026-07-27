@@ -6,6 +6,16 @@ class PublicationChannels:
     website: bool = True
     telegram_en: bool = False
     telegram_ru: bool = False
+    x: bool = False
+    linkedin: bool = False
+    medium: bool = False
+    substack: bool = False
+    devto: bool = False
+    hashnode: bool = False
+    reddit: bool = False
+
+    def enabled_destinations(self):
+        return tuple(name for name in ("website", "telegram_en", "telegram_ru", "x", "linkedin", "medium", "substack", "devto", "hashnode", "reddit") if getattr(self, name, False))
 
 
 class ChannelSelector:

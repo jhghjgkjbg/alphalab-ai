@@ -23,6 +23,20 @@ class SQLiteDatabase:
             c.executescript("""
             CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS published_articles(id TEXT PRIMARY KEY,published_at TEXT NOT NULL,title TEXT NOT NULL,summary TEXT NOT NULL DEFAULT '',url TEXT NOT NULL,canonical_url TEXT NOT NULL UNIQUE,source TEXT NOT NULL DEFAULT '',category TEXT NOT NULL DEFAULT '',language TEXT NOT NULL DEFAULT 'en',score REAL NOT NULL DEFAULT 0,trend_bonus REAL NOT NULL DEFAULT 0,reputation REAL NOT NULL DEFAULT 0,editorial_score INTEGER NOT NULL DEFAULT 0,editorial_verdict TEXT NOT NULL DEFAULT '',telegram_message_id INTEGER,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS production_reservations(article_id TEXT PRIMARY KEY,canonical_url TEXT NOT NULL UNIQUE,state TEXT NOT NULL,owner TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS publication_deliveries(article_id TEXT NOT NULL,canonical_url TEXT NOT NULL,destination TEXT NOT NULL,status TEXT NOT NULL,attempt_count INTEGER NOT NULL DEFAULT 0,external_id TEXT,error TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,PRIMARY KEY(article_id,destination),UNIQUE(canonical_url,destination));
+            CREATE TABLE IF NOT EXISTS distribution_events(event_id TEXT PRIMARY KEY,occurred_at TEXT NOT NULL,event_type TEXT NOT NULL,article_id TEXT NOT NULL,destination_id TEXT NOT NULL,delivery_status TEXT NOT NULL,attempt_number INTEGER NOT NULL,external_id TEXT,scheduled_for TEXT,reason TEXT,metadata_json TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS growth_events(event_id TEXT PRIMARY KEY,occurred_at TEXT NOT NULL,event_type TEXT NOT NULL,subscriber_id TEXT,anonymous_id TEXT,article_id TEXT,destination_id TEXT,campaign_id TEXT,link_id TEXT,utm_source TEXT,utm_medium TEXT,utm_campaign TEXT,utm_content TEXT,metadata_json TEXT NOT NULL);
+            CREATE INDEX IF NOT EXISTS idx_growth_subscriber ON growth_events(subscriber_id,occurred_at);
+            CREATE INDEX IF NOT EXISTS idx_growth_anonymous ON growth_events(anonymous_id,occurred_at);
+            CREATE INDEX IF NOT EXISTS idx_growth_article_destination ON growth_events(article_id,destination_id);
+            CREATE INDEX IF NOT EXISTS idx_growth_campaign ON growth_events(campaign_id,occurred_at);
+            CREATE INDEX IF NOT EXISTS idx_growth_link ON growth_events(link_id,occurred_at);
+            CREATE INDEX IF NOT EXISTS idx_growth_type ON growth_events(event_type,occurred_at);
+            CREATE INDEX IF NOT EXISTS idx_distribution_article ON distribution_events(article_id,destination_id);
+            CREATE INDEX IF NOT EXISTS idx_distribution_destination ON distribution_events(destination_id,occurred_at);
+            CREATE INDEX IF NOT EXISTS idx_distribution_type ON distribution_events(event_type,occurred_at);
+            CREATE INDEX IF NOT EXISTS idx_delivery_url ON publication_deliveries(canonical_url,destination);
             CREATE TABLE IF NOT EXISTS publications(publication_id TEXT PRIMARY KEY,source TEXT NOT NULL,source_url TEXT NOT NULL,canonical_url TEXT NOT NULL UNIQUE,original_title TEXT NOT NULL,en_title TEXT NOT NULL,en_body TEXT NOT NULL,ru_title TEXT NOT NULL,ru_body TEXT NOT NULL,status TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
             CREATE INDEX IF NOT EXISTS idx_pub_date ON published_articles(published_at); CREATE INDEX IF NOT EXISTS idx_pub_source ON published_articles(source); CREATE INDEX IF NOT EXISTS idx_pub_category ON published_articles(category);
             CREATE TABLE IF NOT EXISTS publication_memory(identity TEXT PRIMARY KEY,article_id TEXT,canonical_url TEXT NOT NULL,title TEXT NOT NULL DEFAULT '',source TEXT NOT NULL DEFAULT '',category TEXT NOT NULL DEFAULT '',published_at TEXT NOT NULL,expires_at TEXT NOT NULL,embedding_json TEXT,created_at TEXT NOT NULL);
@@ -33,6 +47,9 @@ class SQLiteDatabase:
             CREATE TABLE IF NOT EXISTS analytics_daily(day TEXT PRIMARY KEY,received INTEGER NOT NULL DEFAULT 0,published INTEGER NOT NULL DEFAULT 0,rejected INTEGER NOT NULL DEFAULT 0,editorial_calls INTEGER NOT NULL DEFAULT 0,translation_calls INTEGER NOT NULL DEFAULT 0,duplicates INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL);
             """)
             columns = {row[1] for row in c.execute("PRAGMA table_info(published_articles)")}
+            delivery_columns = {row[1] for row in c.execute("PRAGMA table_info(publication_deliveries)")}
+            if "scheduled_for" not in delivery_columns:
+                c.execute("ALTER TABLE publication_deliveries ADD COLUMN scheduled_for TEXT")
             if "en_body" not in columns:
                 try:
                     c.execute("ALTER TABLE published_articles ADD COLUMN en_body TEXT NOT NULL DEFAULT ''")

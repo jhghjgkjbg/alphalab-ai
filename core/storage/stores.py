@@ -1,4 +1,5 @@
-from datetime import datetime, UTC
+from datetime import datetime, UTC, timedelta
+from uuid import uuid4
 from .database import SQLiteDatabase
 from datetime import datetime, UTC
 from dataclasses import fields, is_dataclass
@@ -35,6 +36,81 @@ class SQLitePublishedArticlesStore:
         with self.database.connect() as c:
             row = c.execute("SELECT summary,score FROM published_articles WHERE id=? OR canonical_url=? LIMIT 1", (article_id or '', url or '')).fetchone()
             return row is not None and bool(str(row["summary"] or "").strip() or float(row["score"] or 0))
+    def reserve(self, article_id, canonical_url, owner=None, ttl_seconds=1800):
+        """Atomically claim an article for one production run."""
+        aid, url = str(article_id or ""), str(canonical_url or "")
+        if not aid or not url:
+            return False
+        now = datetime.now(UTC).isoformat(); owner = owner or uuid4().hex
+        try:
+            with self.database.connect() as c:
+                c.execute("BEGIN IMMEDIATE")
+                row = c.execute("SELECT state,updated_at FROM production_reservations WHERE article_id=? OR canonical_url=? LIMIT 1", (aid, url)).fetchone()
+                if row is not None:
+                    stale = row["state"] == "reserved" and datetime.fromisoformat(row["updated_at"]) < datetime.now(UTC) - timedelta(seconds=ttl_seconds)
+                    if not stale or row["state"] == "published":
+                        return False
+                    c.execute("DELETE FROM production_reservations WHERE article_id=? OR canonical_url=?", (aid, url))
+                c.execute("INSERT INTO production_reservations(article_id,canonical_url,state,owner,created_at,updated_at) VALUES(?,?,?,?,?,?)", (aid, url, "reserved", owner, now, now))
+            return True
+        except Exception as exc:
+            import sqlite3
+            if isinstance(exc, sqlite3.IntegrityError):
+                return False
+            raise
+    def finalize_reservation(self, article_id, canonical_url, owner=None):
+        with self.database.connect() as c:
+            query = "UPDATE production_reservations SET state='published',updated_at=? WHERE article_id=? AND canonical_url=?"
+            args = [datetime.now(UTC).isoformat(), str(article_id or ""), str(canonical_url or "")]
+            if owner is not None: query += " AND owner=?"; args.append(owner)
+            return c.execute(query, args).rowcount > 0
+    def release_reservation(self, article_id, canonical_url, owner=None):
+        with self.database.connect() as c:
+            query = "DELETE FROM production_reservations WHERE article_id=? AND canonical_url=?"
+            args = [str(article_id or ""), str(canonical_url or "")]
+            if owner is not None: query += " AND owner=?"; args.append(owner)
+            return c.execute(query, args).rowcount > 0
+    def begin_delivery_attempt(self, article_id, canonical_url, destination, scheduled_for=None):
+        now = datetime.now(UTC).isoformat()
+        with self.database.connect() as c:
+            value = scheduled_for.astimezone(UTC).isoformat() if scheduled_for is not None else None
+            c.execute("INSERT INTO publication_deliveries(article_id,canonical_url,destination,status,attempt_count,created_at,updated_at,scheduled_for) VALUES(?,?,?,?,1,?,?,?) ON CONFLICT(article_id,destination) DO UPDATE SET status='pending',attempt_count=attempt_count+1,updated_at=?,scheduled_for=?", (str(article_id), str(canonical_url), str(destination), "pending", now, now, value, now, value))
+            return c.execute("SELECT * FROM publication_deliveries WHERE article_id=? AND destination=?", (str(article_id), str(destination))).fetchone()
+    def prepare_delivery_attempt(self, article_id, canonical_url, destination, ttl_seconds=1800, scheduled_for=None):
+        now = datetime.now(UTC).isoformat()
+        with self.database.connect() as c:
+            c.execute("BEGIN IMMEDIATE")
+            row = c.execute("SELECT * FROM publication_deliveries WHERE article_id=? AND destination=?", (str(article_id), str(destination))).fetchone()
+            if row is None:
+                value = scheduled_for.astimezone(UTC).isoformat() if scheduled_for is not None else None
+                c.execute("INSERT INTO publication_deliveries(article_id,canonical_url,destination,status,attempt_count,created_at,updated_at,scheduled_for) VALUES(?,?,?,?,1,?,?,?)", (str(article_id), str(canonical_url), str(destination), "pending", now, now, value))
+                return "send"
+            if row["status"] in {"sent", "unknown"}:
+                return "skip"
+            stale = row["status"] == "pending" and datetime.fromisoformat(row["updated_at"]) < datetime.now(UTC) - timedelta(seconds=ttl_seconds)
+            if row["status"] == "pending" and not stale:
+                return "skip"
+            value = scheduled_for.astimezone(UTC).isoformat() if scheduled_for is not None else None
+            c.execute("UPDATE publication_deliveries SET status='pending',attempt_count=attempt_count+1,updated_at=?,scheduled_for=COALESCE(scheduled_for, ?) WHERE article_id=? AND destination=?", (now, value, str(article_id), str(destination)))
+            return "send"
+    def record_delivery(self, article_id, canonical_url, destination, status, external_id=None, error=None):
+        if status not in {"pending", "sent", "failed", "unknown", "skipped"}:
+            raise ValueError("invalid delivery status")
+        now = datetime.now(UTC).isoformat()
+        with self.database.connect() as c:
+            cur = c.execute("UPDATE publication_deliveries SET status=?,external_id=?,error=?,updated_at=? WHERE article_id=? AND destination=?", (status, None if external_id is None else str(external_id), error, now, str(article_id), str(destination)))
+            return cur.rowcount > 0
+    def delivery_state(self, article_id=None, canonical_url=None, destination=None):
+        with self.database.connect() as c:
+            clauses=[]; args=[]
+            if article_id is not None: clauses.append("article_id=?"); args.append(str(article_id))
+            if canonical_url is not None: clauses.append("canonical_url=?"); args.append(str(canonical_url))
+            if destination is not None: clauses.append("destination=?"); args.append(str(destination))
+            if not clauses: return None
+            rows = c.execute("SELECT * FROM publication_deliveries WHERE " + " AND ".join(clauses) + " ORDER BY updated_at DESC", args).fetchall()
+            return [dict(r) for r in rows]
+    def delivery_states(self, article_id, canonical_url=None):
+        return self.delivery_state(article_id=article_id, canonical_url=canonical_url)
     def latest(self,limit=50):
         with self.database.connect() as c:return [dict(r) for r in c.execute("SELECT * FROM published_articles ORDER BY published_at DESC LIMIT ?",(limit,))]
     def search(self,query,limit=50):
