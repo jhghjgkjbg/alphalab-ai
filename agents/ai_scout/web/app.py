@@ -174,7 +174,7 @@ def create_app(store=None):
                 return None
 
         rows = store.latest(50) if hasattr(store, "latest") else list(store._items)[:50]
-        base = os.getenv("ALPHALAB_PUBLIC_BASE_URL", "http://127.0.0.1:8080").rstrip("/")
+        base = (os.getenv("ALPHALAB_PUBLIC_BASE_URL") or os.getenv("PUBLIC_BASE_URL") or "https://alphalabai.online").rstrip("/")
         items = []
         for row in rows:
             title = row.get(f"{language}_title") if language else row.get("title")
