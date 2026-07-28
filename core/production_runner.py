@@ -210,7 +210,8 @@ class ProductionRunner:
                     rows = self.store.delivery_state(article_id=delivery_article_id, destination=destination) or []
                     if rows:
                         row = rows[0]; restored[destination] = row
-                        report = replace(report, **{destination: row["status"]}, details={**(report.details or {}), destination: {"status": row["status"], "external_id": row["external_id"], "error": row["error"]}})
+                        updated_statuses = {**(report.statuses or {}), destination: row["status"]}
+                        report = replace(report, details={**(report.details or {}), destination: {"status": row["status"], "external_id": row["external_id"], "error": row["error"]}}, statuses=updated_statuses, website=(row["status"] if destination == "website" else report.website), telegram_en=(row["status"] if destination == "telegram_en" else report.telegram_en), telegram_ru=(row["status"] if destination == "telegram_ru" else report.telegram_ru))
             if report.website == "sent" and self.store is not None and hasattr(self.store, "append"):
                 article_id = str(getattr(publication, "article_id", "") or getattr(publication, "publication_id", ""))
                 article_url = str(getattr(publication, "canonical_url", "") or getattr(publication, "url", ""))
@@ -229,7 +230,7 @@ class ProductionRunner:
                 details = report.details or {}
                 for destination in ("website", "telegram_en", "telegram_ru", "x", "linkedin", "medium", "substack", "devto", "hashnode", "reddit"):
                     if getattr(channels, destination, False):
-                        detail = details.get(destination, {"status": getattr(report, destination), "error": (report.failure_reasons or {}).get(destination)})
+                        detail = details.get(destination, {"status": (report.statuses or {}).get(destination, "blocked"), "error": (report.failure_reasons or {}).get(destination)})
                         if destination == "website":
                             detail = {**detail, "status": report.website, "error": (report.failure_reasons or {}).get(destination) or detail.get("error")}
                         saved = self.store.record_delivery(delivery_article_id, delivery_url, destination, detail.get("status", "failed"), detail.get("external_id"), detail.get("error") or None)
