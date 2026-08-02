@@ -26,6 +26,26 @@ def test_telegram_uses_public_url_and_website_keeps_source():
     assert "https://alphalabai.online/article/a%2F1" in en.text
     assert "utm_content=en" in en.text
     assert "utm_content=ru" in ru.text
-    assert "source.example" not in en.text and "source.example" not in ru.text
+    assert "source.example" in en.text and "source.example" in ru.text
+    assert "🔗 Read on AlphaLab" in en.text
+    assert "🌍 Original source" in en.text
+    assert "🔗 Читать на AlphaLab" in ru.text
+    assert "🌍 Оригинальный источник" in ru.text
     assert website.url == pub.url
     assert pub.canonical_url.startswith("https://source.example")
+
+
+def test_telegram_summary_format_and_safe_limit():
+    pub = PublicationBuilder().build(SimpleNamespace(external_id="long", source="src", payload={"title": "Headline", "summary": "First paragraph.\n\nSecond paragraph with enough detail.\n\nThird paragraph.", "url": ""}))
+    text = TelegramRenderer("en", "https://alphalabai.online").render(pub).text
+    assert "First paragraph.\n\nSecond paragraph" in text
+    assert "Original source" not in text
+    assert len(text) <= 4096
+
+
+def test_telegram_long_summary_does_not_cut_sentence():
+    summary = ("A complete sentence. " * 400).strip()
+    pub = PublicationBuilder().build(SimpleNamespace(external_id="long", source="src", payload={"title": "Headline", "summary": summary, "url": "https://source.example/item"}))
+    text = TelegramRenderer("en").render(pub).text
+    assert len(text) <= 4096
+    assert "A complete sentence." in text
