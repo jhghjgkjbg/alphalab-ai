@@ -84,6 +84,27 @@ class RSSCollectorTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             RSSCollector("file:///tmp/feed.xml")
 
+    def test_image_fields_priority_and_validation(self) -> None:
+        feed = b'''<rss><channel><item><title>Image</title><link>https://example.com/a</link>
+        <media:content xmlns:media="http://search.yahoo.com/mrss/" url="https://cdn.example/content.jpg"/>
+        <media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://cdn.example/thumb.jpg"/>
+        <enclosure url="https://cdn.example/file.png" type="image/png"/></item></channel></rss>'''
+        item = asyncio.run(RSSCollector("https://example.com/rss", fetch=lambda *_: feed).collect()).items[0]
+        self.assertEqual(item.payload["image_url"], "https://cdn.example/content.jpg")
+
+    def test_thumbnail_and_image_enclosure_fallback_and_invalid_urls(self) -> None:
+        feed = b'''<rss><channel>
+        <item><title>Thumb</title><link>https://example.com/t</link><media:thumbnail xmlns:media="http://search.yahoo.com/mrss/" url="https://cdn.example/thumb.jpg"/></item>
+        <item><title>Enclosure</title><link>https://example.com/e</link><enclosure url="https://cdn.example/file.jpg" type="image/jpeg"/></item>
+        <item><title>Invalid</title><link>https://example.com/i</link><enclosure url="/relative.jpg" type="image/jpeg"/></item>
+        <item><title>NonImage</title><link>https://example.com/n</link><enclosure url="https://cdn.example/file.txt" type="text/plain"/></item>
+        </channel></rss>'''
+        items = asyncio.run(RSSCollector("https://example.com/rss", fetch=lambda *_: feed).collect()).items
+        self.assertEqual(items[0].payload["image_url"], "https://cdn.example/thumb.jpg")
+        self.assertEqual(items[1].payload["image_url"], "https://cdn.example/file.jpg")
+        self.assertNotIn("image_url", items[2].payload)
+        self.assertNotIn("image_url", items[3].payload)
+
 
 if __name__ == "__main__":
     unittest.main()

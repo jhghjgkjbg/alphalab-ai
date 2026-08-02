@@ -143,11 +143,15 @@ class RSSCollector(BaseCollector):
             or self._text(entry, "updated")
         )
         author = self._text(entry, "creator") or self._author(entry)
+        image_url = self._image_url(entry)
+        payload = {"title": title, "url": link, "content": normalize_rss_text(content)}
+        if image_url:
+            payload["image_url"] = image_url
         return SourceItem(
             source="rss",
             external_id=external_id,
             collected_at=datetime.now(UTC),
-            payload={"title": title, "url": link, "content": normalize_rss_text(content)},
+            payload=payload,
             metadata={"author": author, "published_at": published_at},
         )
 
@@ -184,6 +188,21 @@ class RSSCollector(BaseCollector):
         for author in element.iter():
             if cls._local_name(author.tag).lower() == "author":
                 return cls._text(author, "name") or (author.text or "").strip()
+        return ""
+
+    @classmethod
+    def _image_url(cls, element: ElementTree.Element) -> str:
+        candidates = []
+        for child in element.iter():
+            name = cls._local_name(child.tag).lower()
+            if name in {"content", "thumbnail"}:
+                candidates.append(child.attrib.get("url", ""))
+            elif name == "enclosure" and str(child.attrib.get("type", "")).lower().startswith("image/"):
+                candidates.append(child.attrib.get("url", ""))
+        for candidate in candidates:
+            parsed = urlparse(str(candidate).strip())
+            if parsed.scheme in {"http", "https"} and parsed.netloc:
+                return str(candidate).strip()
         return ""
 
     @staticmethod
