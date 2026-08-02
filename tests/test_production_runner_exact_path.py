@@ -34,6 +34,18 @@ class _Website:
 
 
 class ExactProductionPathTests(unittest.TestCase):
+    def test_language_text_validation_rejects_cross_language_and_empty_values(self):
+        self.assertTrue(ProductionRunner._valid_text("Valid English summary", "en"))
+        self.assertFalse(ProductionRunner._valid_text("Valid English summary", "ru"))
+        self.assertTrue(ProductionRunner._valid_text("Русское резюме", "ru"))
+        self.assertFalse(ProductionRunner._valid_text("Русское резюме", "en"))
+        self.assertTrue(ProductionRunner._valid_text("English текст", "en"))
+        self.assertTrue(ProductionRunner._valid_text("Русский text", "ru"))
+        self.assertFalse(ProductionRunner._valid_text("Abвг", "en"))
+        self.assertFalse(ProductionRunner._valid_text("Abвг", "ru"))
+        self.assertFalse(ProductionRunner._valid_text("   ", "en"))
+        self.assertFalse(ProductionRunner._valid_text("   ", "ru"))
+
     def _run(self, legacy=False):
         td = tempfile.mkdtemp()
         try:

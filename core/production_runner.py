@@ -27,6 +27,32 @@ class ProductionRunResult:
 
 
 class ProductionRunner:
+    @staticmethod
+    def _has_cyrillic(text):
+        return any("\u0400" <= ch <= "\u04ff" for ch in str(text or ""))
+
+    @staticmethod
+    def _has_latin(text):
+        return any(("a" <= ch.lower() <= "z") for ch in str(text or ""))
+
+    @staticmethod
+    def _letter_counts(text):
+        value = str(text or "")
+        return (
+            sum("\u0400" <= ch <= "\u04ff" for ch in value),
+            sum("a" <= ch.lower() <= "z" for ch in value),
+        )
+
+    @classmethod
+    def _valid_text(cls, text, language):
+        value = " ".join(str(text or "").split())
+        if not value or not any(ch.isalnum() for ch in value):
+            return False
+        cyr, latin = cls._letter_counts(value)
+        if language == "ru":
+            return cyr > latin
+        return latin > cyr
+
     def __init__(self, store=None, delivery=None, provider=None, composition_root=None, confirm_send=False, reservation_ttl_seconds=1800, pending_ttl_seconds=1800):
         self.composition_root = composition_root
         self.store = store or getattr(composition_root, "articles_store", None)
@@ -136,6 +162,10 @@ class ProductionRunner:
                 summary = getattr(context, "long_summary", "") or getattr(context, "short_summary", "")
                 suggestions = getattr(context, "headline_suggestions", ()) or ()
                 title = suggestions[0] if suggestions else publication.title
+                if not self._valid_text(title, "en"):
+                    title = publication.title if self._valid_text(publication.title, "en") else ""
+                if not self._valid_text(summary, "en"):
+                    summary = publication.summary if self._valid_text(publication.summary, "en") else ""
                 translation = getattr(context, "translation", "") or ""
                 ru_title = getattr(context, "ru_title", "") or ""
                 ru_body = getattr(context, "ru_body", "") or ""
@@ -146,6 +176,11 @@ class ProductionRunner:
             has_ru_variant = "ru" in (getattr(publication, "variants", {}) or {})
             ai_succeeded = context is not None and bool(getattr(context, "confidence", 0) or getattr(context, "short_summary", "") or getattr(context, "long_summary", ""))
             channels = ChannelSelector().select(priority, window, audience, angle, publication.language, publication.category, ai_succeeded=ai_succeeded, has_ru_variant=has_ru_variant)
+            en_variant = publication.variants.get("en")
+            ru_variant = publication.variants.get("ru")
+            en_ok = bool(en_variant and self._valid_text(en_variant.title, "en") and self._valid_text(en_variant.summary, "en"))
+            ru_ok = bool(ru_variant and self._valid_text(ru_variant.title, "ru") and self._valid_text(ru_variant.body or ru_variant.summary, "ru"))
+            channels = replace(channels, telegram_en=channels.telegram_en and en_ok, telegram_ru=channels.telegram_ru and ru_ok)
             if getattr(self.composition_root, "x_enabled", False) and getattr(self.composition_root, "x_publisher", None):
                 channels = replace(channels, x=True)
             if getattr(self.composition_root, "linkedin_enabled", False) and getattr(self.composition_root, "linkedin_publisher", None):
