@@ -9,6 +9,7 @@ from core.renderers.website import WebsiteRenderer
 from core.storage import SQLiteDatabase, SQLitePublishedArticlesStore
 from pathlib import Path
 import tempfile
+from agents.ai_scout.agent import production_scoring_request
 
 
 def test_existing_ranking_and_scoring_score_reaches_website_view():
@@ -27,3 +28,13 @@ def test_existing_ranking_and_scoring_score_reaches_website_view():
         store = SQLitePublishedArticlesStore(SQLiteDatabase(Path(directory) / "score.db"))
         store.append(publication)
         assert store.latest(1)[0]["score"] == scored.final_score
+
+
+def test_production_preserves_distinct_source_signals_in_scores():
+    now = __import__("datetime").datetime.now(__import__("datetime").UTC)
+    first = SourceItem("github", "one", now, {"title": "One", "summary": "Summary", "url": "https://example.test/one", "popularity_bonus": 0.1})
+    second = SourceItem("github", "two", now, {"title": "Two", "summary": "Summary", "url": "https://example.test/two", "popularity_bonus": 0.7})
+    ranked = RankingEngineV1()
+    requests = [production_scoring_request(item, ranked.rank(PublicationBuilder().build(item)).ranking_score) for item in (first, second)]
+    scores = ScoringEngine().score_items(requests).items
+    assert scores[0].final_score != scores[1].final_score

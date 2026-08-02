@@ -6,6 +6,7 @@ from pathlib import Path
 import asyncio
 import logging
 import sys
+from datetime import datetime
 from collections.abc import Callable
 from typing import TextIO
 
@@ -68,6 +69,34 @@ from core.source_manager.types import (
 
 
 logger = logging.getLogger(__name__)
+
+
+def production_scoring_request(item, ranking_score):
+    """Preserve source-provided scoring signals at the production boundary."""
+    from core.scoring.types import ScoringRequest
+
+    payload = getattr(item, "payload", {}) or {}
+    def number(name):
+        try:
+            return float(payload.get(name, 0) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+    published_at = payload.get("published_at")
+    if isinstance(published_at, str):
+        try:
+            published_at = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+        except ValueError:
+            published_at = None
+    return ScoringRequest(
+        item,
+        ranking_score=ranking_score,
+        similarity_penalty=number("similarity_penalty"),
+        source_priority=number("source_priority"),
+        freshness_bonus=number("freshness_bonus"),
+        popularity_bonus=number("popularity_bonus"),
+        manual_boost=number("manual_boost"),
+        published_at=published_at,
+    )
 
 
 class AIScout:
@@ -1010,7 +1039,7 @@ async def main(argv: list[str] | None = None) -> None:
         for item in items:
             publication = ranking.rank(PublicationBuilder().build(item))
             scored_items.append((item, publication.ranking_score))
-        scored = scoring.score_items([ScoringRequest(item, ranking_score=score) for item, score in scored_items])
+        scored = scoring.score_items([production_scoring_request(item, score) for item, score in scored_items])
         score_by_id = {id(result.item): result.final_score for result in scored.items}
         items = [replace(item, payload={**item.payload, "score": score_by_id.get(id(item), 0.0)}) for item, _ in scored_items]
         try:
