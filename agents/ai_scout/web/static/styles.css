@@ -45,3 +45,11 @@
 .card:hover{transform:none;border-color:#cbd5e1;box-shadow:0 12px 28px #18223012}
 .card a:focus-visible{outline:2px solid #a8a4ff;outline-offset:3px;border-radius:4px}
 @media(prefers-reduced-motion:reduce){.card{transition:none}.card:hover{transform:none}}
+
+/* Homepage search and empty-state controls. */
+.controls label:first-child{position:relative}
+.controls label:first-child input{padding-right:2.25rem}
+.search-clear{position:absolute;right:.55rem;top:50%;transform:translateY(-50%);border:0;background:transparent;color:var(--muted);font-size:1.25rem;line-height:1;padding:.2rem;cursor:pointer}
+.search-clear:hover{color:var(--ink)}
+.search-clear:focus-visible,.empty-clear:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.empty-clear{margin-top:.75rem}

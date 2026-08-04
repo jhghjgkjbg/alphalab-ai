@@ -47,3 +47,17 @@ def test_card_highlights_use_existing_summary_with_safe_fallback():
     assert "function highlights" in script
     assert "card-highlights" in script and "card-highlights" in css
     assert "slice(0, 2)" in script
+
+
+def test_feed_search_filters_empty_state_and_load_more_contract():
+    script = open("agents/ai_scout/web/static/app.js", encoding="utf-8").read()
+    assert "setTimeout(() => load(true), 280)" in script
+    assert "aria-label', 'Search articles" in script
+    assert "aria-label', 'Clear search" in script
+    assert "event.key === 'Escape'" in script
+    assert "event.key === 'Enter'" in script
+    assert "No articles found" in script
+    assert "Try another search or reset filters." in script
+    assert "Clear filters" in script
+    assert "more.textContent = 'Loading...'" in script
+    assert "more.textContent = 'Load more'" in script
