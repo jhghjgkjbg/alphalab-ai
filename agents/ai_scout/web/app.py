@@ -3,7 +3,9 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.responses import PlainTextResponse, Response
 from html import escape
-import json, os, re
+import json, os, re, hashlib, secrets, smtplib
+from email.message import EmailMessage
+from datetime import timedelta
 from datetime import datetime, timezone
 from email.utils import format_datetime
 from urllib.parse import quote, unquote
@@ -28,17 +30,17 @@ class HTMLResponse(_HTMLResponse):
             if footer_start >= 0:
                 content = content[:footer_start] + _UNIFIED_FOOTER + content[content.find("</footer>", footer_start) + len("</footer>"):]
             content = content.replace("</header>", "<button id='theme-toggle' class='theme-toggle' type='button' aria-label='Toggle dark mode'>☾</button></header>", 1)
-            theme_script = "<script>(function(){try{var t=localStorage.getItem('alphalab-theme');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t;}catch(e){}})();</script>"
+            theme_script = "<script>(function(){try{var t=localStorage.getItem('alphalab-theme');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t;var b=document.getElementById('theme-toggle');if(b&&!b.dataset.bound){b.dataset.bound='1';b.addEventListener('click',function(){var n=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=n;localStorage.setItem('alphalab-theme',n);b.textContent=n==='dark'?'☀':'☾';});}}catch(e){}})();</script>"
             content = content.replace("</head>", theme_script + "</head>", 1)
         if isinstance(content, str) and "<h1>Subscribe to AlphaLab AI</h1>" in content and "id='subscribe-form'" not in content:
             content = content.replace("http://127.0.0.1:8080", "https://alphalabai.online")
             content = content.replace("<h2>Telegram</h2><p>AlphaLab AI also publishes updates through the official English Telegram channel.</p>", "<h2>Telegram</h2><p>Follow AlphaLab AI Scout on Telegram for real-time AI news.</p><p><a class='button primary' href='https://t.me/alphalabai_en' target='_blank' rel='noopener noreferrer'>Join Telegram</a></p>")
-            form = "<form id='subscribe-form' class='subscribe-form' novalidate><label for='subscriber-email'>Email</label><input id='subscriber-email' name='email' type='email' placeholder='your@email.com' required maxlength='254' autocomplete='email'><label class='consent-label'><input name='consent' type='checkbox' required> I agree to receive AlphaLab AI updates by email.</label><button class='button primary' type='submit'>Subscribe</button><p id='subscribe-status' role='status' aria-live='polite'></p></form><script>(function(){const f=document.getElementById('subscribe-form'),s=document.getElementById('subscribe-status');f.addEventListener('submit',async function(e){e.preventDefault();s.textContent='Subscribing...';const b=f.querySelector('button');b.disabled=true;try{if(!f.email.value.trim()){s.textContent='Please enter a valid email.';return;}if(!f.consent.checked){s.textContent='Please accept the subscription consent.';return;}const r=await fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:f.email.value,consent:f.consent.checked})});const d=await r.json();if(!r.ok){s.textContent=r.status===422?(f.email.validity.valid?'Please accept the subscription consent.':'Please enter a valid email.'):'Unable to subscribe right now.';return;}s.textContent=d.already_subscribed?'You\'re already subscribed.':'Thanks for subscribing! You\'ll receive future AlphaLab AI updates by email.';f.reset();}catch(err){s.textContent='Unable to subscribe right now.';}finally{b.disabled=false;}})})();</script>"
+            form = "<form id='subscribe-form' class='subscribe-form' novalidate><label for='subscriber-email'>Email</label><input id='subscriber-email' name='email' type='email' placeholder='your@email.com' required maxlength='254' autocomplete='email'><label class='consent-label'><input name='consent' type='checkbox' required> I agree to receive AlphaLab AI updates by email.</label><button class='button primary' type='submit'>Subscribe</button><p id='subscribe-status' role='status' aria-live='polite'></p></form><script>(function(){const f=document.getElementById('subscribe-form'),s=document.getElementById('subscribe-status');f.addEventListener('submit',async function(e){e.preventDefault();s.textContent='Subscribing...';const b=f.querySelector('button');b.disabled=true;try{if(!f.email.value.trim()){s.textContent='Please enter a valid email.';return;}if(!f.consent.checked){s.textContent='Please accept the subscription consent.';return;}const r=await fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:f.email.value,consent:f.consent.checked})});const d=await r.json();if(!r.ok){s.textContent=r.status===422?(f.email.validity.valid?'Please accept the subscription consent.':'Please enter a valid email.'):(d.detail||'Unable to subscribe right now.');return;}s.textContent=d.already_subscribed?'You\'re already subscribed.':(d.pending?'Check your inbox. We sent you a confirmation link.':'Check your inbox.');f.reset();}catch(err){s.textContent='Unable to subscribe right now.';}finally{b.disabled=false;}})})();</script>"
             content = content.replace("</article>", form + "</article>", 1)
             content = re.sub(r"<p class='feed-url'>.*?</p>", "", content, count=1)
         super().__init__(content, *args, **kwargs)
 
-def create_app(store=None):
+def create_app(store=None, email_sender=None):
     app=FastAPI(title="AI Scout", docs_url=None, redoc_url=None)
     root = Path(__file__).resolve().parents[3]
     app.mount("/static", StaticFiles(directory=str(Path(__file__).with_name("static"))), name="static")
@@ -164,6 +166,19 @@ def create_app(store=None):
     def subscribe():
         base = os.getenv("ALPHALAB_PUBLIC_BASE_URL", "http://127.0.0.1:8080").rstrip("/")
         return HTMLResponse(f"<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Subscribe to AlphaLab AI</title><meta name='description' content='Subscribe to AlphaLab AI updates through RSS and follow the latest developments in artificial intelligence and emerging technology.'><link rel='canonical' href='{escape(base + '/subscribe', quote=True)}'><link rel='stylesheet' href='/static/styles.css'></head><body><header class='site-header'><div class='site-header__inner'><a class='site-brand' href='/' aria-label='AlphaLab AI home'><span class='site-brand__mark' aria-hidden='true'>A</span><span class='site-brand__text'><strong>AlphaLab AI</strong><small>Signal, not noise.</small></span></a><nav class='site-nav' aria-label='Primary navigation'><a href='/'>Latest News</a><a href='/about'>About</a><a class='active' href='/subscribe'>Subscribe</a><a href='/rss'>RSS</a></nav></div></header><main class='about-page'><article class='article-card'><h1>Subscribe to AlphaLab AI</h1><p>Follow the latest AI news and technology intelligence without relying on social media algorithms.</p><h2>RSS Feed</h2><p>Use the AlphaLab AI RSS feed in Feedly, Inoreader, NewsBlur, or another RSS reader.</p><p><a class='button primary' href='{escape(base + '/rss', quote=True)}'>Open RSS Feed</a></p><p>Copy the feed address and add it to your preferred RSS reader.</p><p class='feed-url'>{escape(base + '/rss')}</p><h2>Telegram</h2><p>AlphaLab AI also publishes updates through dedicated English and Russian Telegram channels.</p></article></main><footer class='site-footer'><strong>AlphaLab AI</strong><span>Signal, not noise.</span><nav aria-label='Footer navigation'><a href='/'>Latest News</a><a href='/about'>About</a><a href='/subscribe'>Subscribe</a><a href='/rss'>RSS</a></nav><small>&copy; AlphaLab AI</small></footer></body></html>")
+    def send_confirmation(recipient, confirmation_url):
+        sender = email_sender
+        if sender is not None:
+            sender(recipient, "Confirm your AlphaLab AI subscription", "Confirm your subscription to AlphaLab AI by opening this link:\n\n" + confirmation_url + "\n\nIf you did not request this, ignore this email.")
+            return
+        host, port, username, password, sender_address = (os.getenv(name, "") for name in ("EMAIL_SMTP_HOST", "EMAIL_SMTP_PORT", "EMAIL_SMTP_USERNAME", "EMAIL_SMTP_PASSWORD", "EMAIL_FROM_ADDRESS"))
+        if not all((host, port, sender_address)):
+            raise RuntimeError("email confirmation unavailable")
+        message = EmailMessage(); message["Subject"] = "Confirm your AlphaLab AI subscription"; message["From"] = sender_address; message["To"] = recipient; message.set_content("Confirm your subscription to AlphaLab AI by opening this link:\n\n" + confirmation_url + "\n\nIf you did not request this, ignore this email.")
+        with smtplib.SMTP(host, int(port), timeout=10) as smtp:
+            if os.getenv("EMAIL_USE_TLS", "true").lower() in {"1", "true", "yes", "on"}: smtp.starttls()
+            if username and password: smtp.login(username, password)
+            smtp.send_message(message)
     @app.post("/api/subscribe")
     async def subscribe_api(request: Request):
         if int(request.headers.get("content-length", "0") or 0) > 16_384:
@@ -190,13 +205,24 @@ def create_app(store=None):
         consent_ok = consent is True or str(consent).strip().lower() in {"1", "true", "yes", "on"}
         if len(email) > 254 or not re.fullmatch(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+", email) or not consent_ok:
             raise HTTPException(422, "valid email and consent are required")
-        if not hasattr(store, "subscribe"):
+        if not hasattr(store, "create_pending_subscriber"):
             raise HTTPException(500, "subscription storage unavailable")
+        raw_token = secrets.token_urlsafe(32); token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest(); expires = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
         try:
-            created = store.subscribe(email)
+            state = store.create_pending_subscriber(email, token_hash, expires)
+            if state == "confirmed": return {"ok": True, "already_subscribed": True}
+            if state == "cooldown": return {"ok": True, "pending": True}
+            base = (os.getenv("ALPHALAB_PUBLIC_BASE_URL") or "https://alphalabai.online").rstrip("/"); send_confirmation(email, base + "/subscribe/confirm?token=" + quote(raw_token, safe=""))
         except Exception:
-            raise HTTPException(500, "subscription unavailable")
-        return {"ok": True, "already_subscribed": not created}
+            raise HTTPException(503, "Email confirmation is temporarily unavailable.")
+        return {"ok": True, "pending": True}
+    @app.get("/subscribe/confirm", response_class=HTMLResponse)
+    def confirm_subscribe(token: str = Query("")):
+        token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest() if token else ""
+        ok = bool(token_hash and hasattr(store, "confirm_subscriber") and store.confirm_subscriber(token_hash))
+        title = "Subscription confirmed" if ok else "Confirmation link is invalid or has expired."
+        body = "You're now subscribed to AlphaLab AI updates." if ok else "Please request a new confirmation link if needed."
+        return HTMLResponse(f"<!doctype html><html lang='en'><head><meta charset='utf-8'><title>{title}</title><link rel='stylesheet' href='/static/styles.css'></head><body>{_UNIFIED_HEADER}<main class='about-page'><article class='article-card'><h1>{title}</h1><p>{body}</p></article></main>{_UNIFIED_FOOTER}</body></html>", status_code=200 if ok else 400)
     @app.get("/robots.txt", response_class=PlainTextResponse)
     def robots(): return f"User-agent: *\nAllow: /\n\nSitemap: {os.getenv('ALPHALAB_PUBLIC_BASE_URL','http://127.0.0.1:8080').rstrip('/')}/sitemap.xml\n"
     @app.get("/sitemap.xml")

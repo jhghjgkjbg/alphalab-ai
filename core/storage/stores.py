@@ -132,6 +132,30 @@ class SQLitePublishedArticlesStore:
                 (str(email), "subscribed", str(consent), now, now),
             )
             return bool(cur.rowcount)
+    def create_pending_subscriber(self, email, token_hash, expires_at, consent_at=None, cooldown_seconds=60):
+        now = datetime.now(UTC).isoformat(); consent = consent_at or now
+        with self.database.connect() as c:
+            row = c.execute("SELECT status,updated_at FROM subscribers WHERE email=?", (str(email),)).fetchone()
+            if row and row["status"] in {"confirmed", "subscribed"}:
+                return "confirmed"
+            if row and row["updated_at"]:
+                try:
+                    if datetime.fromisoformat(row["updated_at"]) > datetime.now(UTC) - timedelta(seconds=cooldown_seconds):
+                        return "cooldown"
+                except ValueError:
+                    pass
+            c.execute("INSERT INTO subscribers(email,status,consent_at,confirmation_token_hash,confirmation_expires_at,confirmed_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(email) DO UPDATE SET status='pending',consent_at=excluded.consent_at,confirmation_token_hash=excluded.confirmation_token_hash,confirmation_expires_at=excluded.confirmation_expires_at,updated_at=excluded.updated_at", (str(email), "pending", str(consent), str(token_hash), str(expires_at), None, now, now))
+            return "pending"
+    def confirm_subscriber(self, token_hash, now=None):
+        current = now or datetime.now(UTC); stamp = current.isoformat()
+        with self.database.connect() as c:
+            row = c.execute("SELECT email,status,confirmation_expires_at FROM subscribers WHERE confirmation_token_hash=?", (str(token_hash),)).fetchone()
+            if not row or row["status"] != "pending": return False
+            try:
+                if datetime.fromisoformat(row["confirmation_expires_at"]) < current: return False
+            except (TypeError, ValueError): return False
+            c.execute("UPDATE subscribers SET status='confirmed',confirmed_at=?,confirmation_token_hash='',confirmation_expires_at='',updated_at=? WHERE email=?", (stamp, stamp, row["email"]))
+            return True
 
 class SQLitePublicationStore:
     STATUSES = {"draft", "published", "failed"}

@@ -9,7 +9,8 @@ from core.storage.stores import SQLitePublishedArticlesStore
 
 def client(tmp_path):
     store = SQLitePublishedArticlesStore(SQLiteDatabase(tmp_path / "subscribers.db"))
-    return TestClient(create_app(store)), store
+    sent = []
+    return TestClient(create_app(store, email_sender=lambda *args: sent.append(args))), store
 
 
 def test_subscribe_form_and_normalized_idempotent_storage(tmp_path):
@@ -24,11 +25,11 @@ def test_subscribe_form_and_normalized_idempotent_storage(tmp_path):
     assert "theme-toggle" in page.text
     first = api.post("/api/subscribe", json={"email": " User@Example.com ", "consent": True})
     second = api.post("/api/subscribe", json={"email": "user@example.com", "consent": True})
-    assert first.status_code == 200 and first.json()["already_subscribed"] is False
-    assert second.status_code == 200 and second.json()["already_subscribed"] is True
+    assert first.status_code == 200 and first.json()["pending"] is True
+    assert second.status_code == 200 and second.json()["pending"] is True
     with store.database.connect() as connection:
         rows = connection.execute("SELECT email,status FROM subscribers").fetchall()
-    assert [(row[0], row[1]) for row in rows] == [("user@example.com", "subscribed")]
+    assert [(row[0], row[1]) for row in rows] == [("user@example.com", "pending")]
 
 
 def test_subscribe_rejects_invalid_email_and_missing_consent(tmp_path):
