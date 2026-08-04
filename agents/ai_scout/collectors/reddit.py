@@ -8,11 +8,12 @@ from core.collector.types import CollectorResult, CollectorStatus, SourceItem
 
 
 class RedditCollector(BaseCollector):
-    def __init__(self, client: RedditClient, limit: int = 10) -> None:
+    def __init__(self, client: RedditClient, limit: int = 10, *, category: str = "") -> None:
         if limit <= 0:
             raise ValueError("limit must be positive")
         self._client = client
         self._limit = limit
+        self._category = category
 
     @classmethod
     def name(cls) -> str:
@@ -30,14 +31,9 @@ class RedditCollector(BaseCollector):
         items = tuple(self._to_source_item(post, finished) for post in result.posts)
         return CollectorResult(self.name(), CollectorStatus.SUCCESS, started, finished, items=items)
 
-    @staticmethod
-    def _to_source_item(post, collected_at: datetime) -> SourceItem:
+    def _to_source_item(self, post, collected_at: datetime) -> SourceItem:
         tags = ("reddit",)
-        return SourceItem(
-            source="reddit",
-            external_id=post.id,
-            collected_at=collected_at,
-            payload={
+        payload = {
                 "title": post.title,
                 "url": post.url or f"https://www.reddit.com{post.permalink}",
                 "summary": post.selftext,
@@ -45,6 +41,13 @@ class RedditCollector(BaseCollector):
                 "tags": tags,
                 "author": post.author,
                 "score": post.score,
-            },
+            }
+        if self._category:
+            payload["category"] = self._category
+        return SourceItem(
+            source="reddit",
+            external_id=post.id,
+            collected_at=collected_at,
+            payload=payload,
             metadata={"published_at": None, "tags": tags, "permalink": post.permalink},
         )

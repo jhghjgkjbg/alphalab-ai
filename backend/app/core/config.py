@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     hashnode_request_timeout_seconds: int = Field(default=10, validation_alias=AliasChoices("ALPHALAB_HASHNODE_REQUEST_TIMEOUT_SECONDS", "hashnode_request_timeout_seconds"))
     hashnode_publish: bool = Field(default=False, validation_alias=AliasChoices("ALPHALAB_HASHNODE_PUBLISH", "hashnode_publish"))
     hashnode_require_pro: bool = Field(default=True, validation_alias=AliasChoices("ALPHALAB_HASHNODE_REQUIRE_PRO", "hashnode_require_pro"))
-    reddit_enabled: bool = Field(default=False, validation_alias=AliasChoices("ALPHALAB_REDDIT_ENABLED", "reddit_enabled"))
+    reddit_enabled: bool = Field(default=True, validation_alias=AliasChoices("ALPHALAB_REDDIT_ENABLED", "REDDIT_ENABLED", "reddit_enabled"))
     reddit_outbox_directory: str = Field(default="runtime/reddit_outbox", validation_alias=AliasChoices("ALPHALAB_REDDIT_OUTBOX_DIRECTORY", "reddit_outbox_directory"))
     reddit_mode: Literal["draft_export", "remote_publish"] = Field(default="draft_export", validation_alias=AliasChoices("ALPHALAB_REDDIT_MODE", "reddit_mode"))
     reddit_subreddit: str = Field(default="", validation_alias=AliasChoices("ALPHALAB_REDDIT_SUBREDDIT", "reddit_subreddit"))
@@ -122,9 +122,8 @@ class Settings(BaseSettings):
     linux_foundation_enabled: bool = Field(default=True, validation_alias=AliasChoices("LINUX_FOUNDATION_ENABLED", "linux_foundation_enabled"))
     arduino_blog_enabled: bool = Field(default=True, validation_alias=AliasChoices("ARDUINO_BLOG_ENABLED", "arduino_blog_enabled"))
     raspberry_pi_blog_enabled: bool = Field(default=True, validation_alias=AliasChoices("RASPBERRY_PI_BLOG_ENABLED", "raspberry_pi_blog_enabled"))
-    github_enabled: bool = False
-    reddit_enabled: bool = False
-    product_hunt_enabled: bool = False
+    github_enabled: bool = Field(default=True, validation_alias=AliasChoices("GITHUB_ENABLED", "ALPHALAB_GITHUB_ENABLED", "github_enabled"))
+    product_hunt_enabled: bool = Field(default=False, validation_alias=AliasChoices("ALPHALAB_PRODUCT_HUNT_ENABLED", "PRODUCT_HUNT_ENABLED", "product_hunt_enabled"))
     devto_enabled: bool = True
     lobsters_enabled: bool = True
     arxiv_enabled: bool = True

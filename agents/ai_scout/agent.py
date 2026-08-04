@@ -308,7 +308,7 @@ class AIScout:
             collector_registry.register_factory(
                 GitHubTrendingCollector.name(),
                 lambda **config: GitHubTrendingCollector(
-                    github_client, int(config.get("max_items", github_max_items))
+                    github_client, int(config.get("max_items", github_max_items)), category=config.get("category", "Open Source")
                 ),
             )
         if reddit_enabled is None:
@@ -318,7 +318,7 @@ class AIScout:
             collector_registry.register_factory(
                 RedditCollector.name(),
                 lambda **config: RedditCollector(
-                    reddit_client, int(config.get("max_items", reddit_limit))
+                    reddit_client, int(config.get("max_items", reddit_limit)), category=config.get("category", "AI")
                 ),
             )
         if product_hunt_enabled is None:
@@ -382,7 +382,7 @@ class AIScout:
             collector_registry.register_factory(
                 RedditCollector.name(),
                 lambda client=client, **config: RedditCollector(
-                    client, int(config.get("max_items", reddit_limit))
+                    client, int(config.get("max_items", reddit_limit)), category=config.get("category", "AI")
                 ),
             )
         if github_request is not None:
@@ -390,7 +390,7 @@ class AIScout:
             collector_registry.register_factory(
                 GitHubTrendingCollector.name(),
                 lambda client=client, **config: GitHubTrendingCollector(
-                    client, int(config.get("max_items", github_max_items))
+                    client, int(config.get("max_items", github_max_items)), category=config.get("category", "Open Source")
                 ),
             )
         self._collector_registry = collector_registry
@@ -431,7 +431,7 @@ class AIScout:
                     interval_seconds=source_interval_seconds,
                     priority=SourcePriority.NORMAL,
                     max_items=github_max_items,
-                    metadata={},
+                    metadata={"category": "Open Source"},
                 )
             )
         if reddit_enabled:
@@ -443,7 +443,7 @@ class AIScout:
                     interval_seconds=source_interval_seconds,
                     priority=SourcePriority.NORMAL,
                     max_items=reddit_limit,
-                    metadata={"subreddit": reddit_subreddit},
+                    metadata={"subreddit": reddit_subreddit, "category": "AI"},
                 )
             )
         if product_hunt_enabled:

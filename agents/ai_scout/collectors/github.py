@@ -8,11 +8,12 @@ from core.collector.types import CollectorResult, CollectorStatus, SourceItem
 
 
 class GitHubTrendingCollector(BaseCollector):
-    def __init__(self, client: GitHubClient, max_items: int = 10) -> None:
+    def __init__(self, client: GitHubClient, max_items: int = 10, *, category: str = "") -> None:
         if max_items <= 0:
             raise ValueError("max_items must be positive")
         self._client = client
         self._max_items = max_items
+        self._category = category
 
     @classmethod
     def name(cls) -> str:
@@ -31,22 +32,24 @@ class GitHubTrendingCollector(BaseCollector):
         items = tuple(self._to_source_item(repo, collected_at) for repo in result.repositories)
         return CollectorResult(self.name(), CollectorStatus.SUCCESS, started, finished, items=items)
 
-    @staticmethod
-    def _to_source_item(repo, collected_at: datetime) -> SourceItem:
+    def _to_source_item(self, repo, collected_at: datetime) -> SourceItem:
         tags = ["github"]
         if repo.language:
             tags.append(repo.language)
-        return SourceItem(
-            source="github",
-            external_id=repo.full_name,
-            collected_at=collected_at,
-            payload={
+        payload = {
                 "title": repo.full_name,
                 "url": repo.html_url,
                 "summary": repo.description or "",
                 "published_at": None,
                 "tags": tuple(tags),
                 "stars": repo.stars,
-            },
+            }
+        if self._category:
+            payload["category"] = self._category
+        return SourceItem(
+            source="github",
+            external_id=repo.full_name,
+            collected_at=collected_at,
+            payload=payload,
             metadata={"published_at": None, "tags": tuple(tags)},
         )
