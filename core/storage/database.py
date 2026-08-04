@@ -45,6 +45,10 @@ class SQLiteDatabase:
             CREATE TABLE IF NOT EXISTS analytics_sources(source TEXT PRIMARY KEY,received INTEGER NOT NULL DEFAULT 0,published INTEGER NOT NULL DEFAULT 0,rejected INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS analytics_categories(category TEXT PRIMARY KEY,published INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS subscribers(email TEXT PRIMARY KEY,status TEXT NOT NULL DEFAULT 'pending',consent_at TEXT NOT NULL,confirmation_token_hash TEXT NOT NULL DEFAULT '',confirmation_expires_at TEXT NOT NULL DEFAULT '',confirmed_at TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS analytics_events(id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,occurred_at TEXT NOT NULL,article_id TEXT NOT NULL DEFAULT '',source TEXT NOT NULL DEFAULT '',category TEXT NOT NULL DEFAULT '',referrer_group TEXT NOT NULL DEFAULT 'direct',utm_source TEXT NOT NULL DEFAULT '',utm_medium TEXT NOT NULL DEFAULT '',utm_campaign TEXT NOT NULL DEFAULT '');
+            CREATE INDEX IF NOT EXISTS idx_analytics_occurred ON analytics_events(occurred_at);
+            CREATE INDEX IF NOT EXISTS idx_analytics_type ON analytics_events(event_type);
+            CREATE INDEX IF NOT EXISTS idx_analytics_article ON analytics_events(article_id);
             CREATE TABLE IF NOT EXISTS analytics_daily(day TEXT PRIMARY KEY,received INTEGER NOT NULL DEFAULT 0,published INTEGER NOT NULL DEFAULT 0,rejected INTEGER NOT NULL DEFAULT 0,editorial_calls INTEGER NOT NULL DEFAULT 0,translation_calls INTEGER NOT NULL DEFAULT 0,duplicates INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL);
             """)
             columns = {row[1] for row in c.execute("PRAGMA table_info(published_articles)")}

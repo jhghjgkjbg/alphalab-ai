@@ -175,6 +175,22 @@ class SQLitePublishedArticlesStore:
             out={"subscribers_total": c.execute("SELECT COUNT(*) FROM subscribers").fetchone()[0], "subscribers_pending": c.execute("SELECT COUNT(*) FROM subscribers WHERE status='pending'").fetchone()[0], "subscribers_confirmed": c.execute("SELECT COUNT(*) FROM subscribers WHERE status IN ('confirmed','subscribed')").fetchone()[0], "articles_total": c.execute("SELECT COUNT(*) FROM published_articles").fetchone()[0], "articles_7d": c.execute("SELECT COUNT(*) FROM published_articles WHERE published_at >= datetime('now','-7 days')").fetchone()[0]}
             out["smtp_configured"] = bool(os.getenv("EMAIL_SMTP_HOST") and os.getenv("EMAIL_FROM_ADDRESS")); out["database_available"] = True
             return out
+    def record_analytics_event(self, event_type, occurred_at=None, article_id="", source="", category="", referrer_group="direct", utm_source="", utm_medium="", utm_campaign=""):
+        allowed={"page_view","article_view","original_source_click","subscribe_page_view","subscribe_submit","subscribe_success","telegram_click","rss_click"}
+        if event_type not in allowed: raise ValueError("invalid analytics event")
+        now=occurred_at or datetime.now(UTC).isoformat()
+        with self.database.connect() as c:
+            c.execute("INSERT INTO analytics_events(event_type,occurred_at,article_id,source,category,referrer_group,utm_source,utm_medium,utm_campaign) VALUES(?,?,?,?,?,?,?,?,?)", (event_type,str(now),str(article_id or "")[:200],str(source or "")[:120],str(category or "")[:120],str(referrer_group or "direct")[:20],str(utm_source or "")[:100],str(utm_medium or "")[:100],str(utm_campaign or "")[:100]))
+    def purge_analytics(self, retention_days=90):
+        days=max(1,int(retention_days))
+        with self.database.connect() as c: return c.execute("DELETE FROM analytics_events WHERE occurred_at < datetime('now', ?)", (f"-{days} days",)).rowcount
+    def analytics_summary(self, days=7):
+        with self.database.connect() as c:
+            rows=c.execute("SELECT event_type,COUNT(*) n FROM analytics_events WHERE occurred_at >= datetime('now', ?) GROUP BY event_type ORDER BY event_type", (f"-{max(1,int(days))} days",)).fetchall()
+            return {r["event_type"]:r["n"] for r in rows}
+    def analytics_breakdown(self, field, days=7):
+        if field not in {"referrer_group","utm_source","utm_campaign"}: raise ValueError("invalid analytics field")
+        with self.database.connect() as c: return [dict(r) for r in c.execute(f"SELECT {field} value,COUNT(*) count FROM analytics_events WHERE occurred_at >= datetime('now', ?) GROUP BY {field} ORDER BY count DESC,value", (f"-{max(1,int(days))} days",))]
 
 class SQLitePublicationStore:
     STATUSES = {"draft", "published", "failed"}

@@ -51,10 +51,27 @@ def create_app(store=None, email_sender=None):
             store = SQLitePublishedArticlesStore()
         except Exception:
             store = PublishedArticlesStore(path=root / "runtime" / "published_articles.json")
+    if hasattr(store, "purge_analytics"):
+        try: store.purge_analytics(int(os.getenv("ALPHALAB_ANALYTICS_RETENTION_DAYS", "90")))
+        except Exception: pass
     def _api_row(row):
         return {key: value for key, value in row.items() if key != "en_body"}
+    analytics_limit = {}
+    def record_event(event_type, **fields):
+        if hasattr(store, "record_analytics_event"):
+            try: store.record_analytics_event(event_type, **fields)
+            except Exception: pass
     @app.get("/api/health")
     def health(): return {"status":"ok","articles":store.count() if hasattr(store,"count") else len(store._items),"storage":"sqlite" if hasattr(store,"database") else "json"}
+    @app.post("/api/analytics/event", status_code=204)
+    async def analytics_event(request: Request):
+        if int(request.headers.get("content-length", "0") or 0) > 4096: raise HTTPException(413, "request too large")
+        try: payload=await request.json()
+        except Exception: raise HTTPException(400, "invalid event")
+        allowed={"original_source_click","subscribe_submit","subscribe_success","telegram_click","rss_click"}
+        if not isinstance(payload, dict) or payload.get("event_type") not in allowed: raise HTTPException(422, "invalid event")
+        record_event(payload["event_type"], article_id=str(payload.get("article_id") or "")[:200], source=str(payload.get("source") or "")[:120], category=str(payload.get("category") or "")[:120], referrer_group=str(payload.get("referrer_group") or "direct")[:20], utm_source=str(payload.get("utm_source") or "")[:100].lower(), utm_medium=str(payload.get("utm_medium") or "")[:100].lower(), utm_campaign=str(payload.get("utm_campaign") or "")[:100].lower())
+        return Response(status_code=204)
     @app.get("/api/articles")
     def articles(page:int=Query(1,ge=1), limit:int=Query(20,ge=1,le=100), q:str|None=None, category:str|None=None, source:str|None=None, language:str|None=None, sort:str="latest"):
         rows=store.search(q) if q else (store.latest(10000) if hasattr(store,"latest") else list(store._items))
@@ -80,7 +97,8 @@ def create_app(store=None, email_sender=None):
         for x in (store.latest(10000) if hasattr(store,"latest") else store._items): out[x.get("source","")]=out.get(x.get("source",""),0)+1
         return out
     @app.get("/", response_class=HTMLResponse)
-    def home(): return HTMLResponse(Path(__file__).with_name("index.html").read_text(encoding="utf-8"))
+    def home():
+        record_event("page_view"); return HTMLResponse(Path(__file__).with_name("index.html").read_text(encoding="utf-8"))
     @app.get("/en", include_in_schema=False)
     def english_redirect(): return RedirectResponse("/", status_code=308)
     @app.get("/ru", include_in_schema=False)
@@ -92,7 +110,7 @@ def create_app(store=None, email_sender=None):
         if not supplied or not secrets.compare_digest(supplied, expected) and supplied not in admin_sessions: raise HTTPException(401, "admin authentication required")
     def admin_headers(response): response.headers["Cache-Control"] = "no-store"; return response
     def admin_shell(title, body):
-        nav="<nav class='admin-nav'><a href='/admin'>Dashboard</a><a href='/admin/subscribers'>Subscribers</a><a href='/admin/articles'>Articles</a><form method='post' action='/admin/logout'><button type='submit'>Logout</button></form></nav>"
+        nav="<nav class='admin-nav'><a href='/admin'>Dashboard</a><a href='/admin/subscribers'>Subscribers</a><a href='/admin/articles'>Articles</a><a href='/admin/analytics'>Analytics</a><form method='post' action='/admin/logout'><button type='submit'>Logout</button></form></nav>"
         return admin_headers(HTMLResponse(f"<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{escape(title)}</title><link rel='stylesheet' href='/static/styles.css'></head><body>{nav}<main class='admin-page'><h1>{escape(title)}</h1>{body}</main></body></html>"))
     @app.get("/admin/login", response_class=HTMLResponse)
     def admin_login():
@@ -123,6 +141,10 @@ def create_app(store=None, email_sender=None):
         admin_guard(request); limit=50; rows=store.admin_articles(source, category, limit, (page-1)*limit, sort == "score") if hasattr(store, "admin_articles") else []
         items="".join(f"<tr><td><a href='/article/{quote(str(r['id']),safe='')}'>{escape(str(r['title']))}</a></td><td>{escape(str(r['source']))}</td><td>{escape(str(r['category']))}</td><td>{escape(str(r['published_at']))}</td><td>{float(r['score'] or 0):.2f}</td></tr>" for r in rows)
         return admin_shell("Articles", f"<table><thead><tr><th>Title</th><th>Source</th><th>Category</th><th>Published</th><th>Score</th></tr></thead><tbody>{items or '<tr><td colspan=5>No articles</td></tr>'}</tbody></table>")
+    @app.get("/admin/analytics", response_class=HTMLResponse)
+    def admin_analytics(request: Request):
+        admin_guard(request); stats=store.analytics_summary(7) if hasattr(store,"analytics_summary") else {}; body="<section class='admin-grid'>"+"".join(f"<div class='card'><h2>{escape(k.replace('_',' ').title())}</h2><p>{int(v)}</p></div>" for k,v in stats.items())+"</section>"
+        return admin_shell("Analytics", body)
     @app.get("/admin/publications", response_class=HTMLResponse)
     def admin_publications(request: Request, status: str|None=None):
         admin_guard(request); rows=store.latest(10000) if hasattr(store,"latest") else list(store._items)
