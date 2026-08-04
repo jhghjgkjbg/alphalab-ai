@@ -39,3 +39,11 @@ def test_homepage_hero_and_responsive_card_layout_are_present():
     assert "id=\"search\"" in html and "id=\"category\"" in html and "id=\"source\"" in html
     assert "aspect-ratio:16/9" in css
     assert ".category-security" in css and ".category-open-source" in css
+
+
+def test_card_highlights_use_existing_summary_with_safe_fallback():
+    script = open("agents/ai_scout/web/static/app.js", encoding="utf-8").read()
+    css = open("agents/ai_scout/web/static/styles.css", encoding="utf-8").read()
+    assert "function highlights" in script
+    assert "card-highlights" in script and "card-highlights" in css
+    assert "slice(0, 3)" in script
