@@ -6,6 +6,7 @@ from pathlib import Path
 import asyncio
 import logging
 import sys
+import math
 from datetime import datetime
 from collections.abc import Callable
 from typing import TextIO
@@ -87,16 +88,38 @@ def production_scoring_request(item, ranking_score):
             published_at = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
         except ValueError:
             published_at = None
+    popularity = _normalized_popularity(payload)
     return ScoringRequest(
         item,
         ranking_score=ranking_score,
         similarity_penalty=number("similarity_penalty"),
         source_priority=number("source_priority"),
         freshness_bonus=number("freshness_bonus"),
-        popularity_bonus=number("popularity_bonus"),
+        popularity_bonus=popularity,
         manual_boost=number("manual_boost"),
         published_at=published_at,
     )
+
+
+def _normalized_popularity(payload):
+    """Map heterogeneous collector popularity values monotonically to 0..1."""
+    if not isinstance(payload, dict):
+        return 0.0
+    if "popularity_bonus" in payload:
+        try:
+            return max(0.0, min(0.5, float(payload["popularity_bonus"])))
+        except (TypeError, ValueError):
+            return 0.0
+    for name, cap in (("score", 100.0), ("stars", 1000.0), ("reactions", 100.0), ("votes_count", 1000.0)):
+        try:
+            value = float(payload.get(name, 0) or 0)
+        except (TypeError, ValueError):
+            value = 0.0
+        if value > 0:
+            return max(0.0, min(0.5, 0.5 * math.log1p(value) / math.log1p(cap)))
+        if name in payload:
+            return 0.0
+    return 0.0
 
 
 class AIScout:

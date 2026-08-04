@@ -9,7 +9,7 @@ from core.renderers.website import WebsiteRenderer
 from core.storage import SQLiteDatabase, SQLitePublishedArticlesStore
 from pathlib import Path
 import tempfile
-from agents.ai_scout.agent import production_scoring_request
+from agents.ai_scout.agent import production_scoring_request, _normalized_popularity
 
 
 def test_existing_ranking_and_scoring_score_reaches_website_view():
@@ -38,3 +38,23 @@ def test_production_preserves_distinct_source_signals_in_scores():
     requests = [production_scoring_request(item, ranked.rank(PublicationBuilder().build(item)).ranking_score) for item in (first, second)]
     scores = ScoringEngine().score_items(requests).items
     assert scores[0].final_score != scores[1].final_score
+
+
+def test_popularity_normalization_is_deterministic_and_bounded():
+    assert _normalized_popularity({"score": 5}) < _normalized_popularity({"score": 100}) <= 1
+    assert 0 < _normalized_popularity({"stars": 100}) <= 1
+    assert 0 < _normalized_popularity({"votes_count": 200}) <= 1
+    assert _normalized_popularity({"popularity_bonus": .25, "score": 100}) == .25
+    assert _normalized_popularity({"score": -1}) == 0
+    assert _normalized_popularity({"score": "bad"}) == 0
+
+
+def test_normalized_popularity_changes_production_selection_and_score_stays_bounded():
+    now = __import__("datetime").datetime.now(__import__("datetime").UTC)
+    low = SourceItem("hacker_news", "low", now, {"title": "Low", "summary": "Summary", "url": "https://example.test/low", "score": 5})
+    high = SourceItem("hacker_news", "high", now, {"title": "High", "summary": "Summary", "url": "https://example.test/high", "score": 100})
+    ranking = RankingEngineV1(); builder = PublicationBuilder(); engine = ScoringEngine()
+    requests = [production_scoring_request(x, ranking.rank(builder.build(x)).ranking_score) for x in (low, high)]
+    scored = engine.score_items(requests).items
+    assert scored[0].item.external_id == "high"
+    assert all(0 <= x.final_score <= 1 for x in scored)
