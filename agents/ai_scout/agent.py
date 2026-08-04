@@ -143,6 +143,9 @@ class AIScout:
         source_interval_seconds: float = 300.0,
         rss_enabled: bool | None = None,
         rss_feed_url: str = "https://news.ycombinator.com/rss",
+        openai_news_enabled: bool = False,
+        microsoft_research_enabled: bool = False,
+        huggingface_blog_enabled: bool = False,
         rss_fetch: Callable[[str, float, int], bytes] | None = None,
         telegram_client: TelegramClient | None = None,
         telegram_bot_token: str | None = None,
@@ -284,6 +287,8 @@ class AIScout:
                     feed_url=str(metadata["feed_url"]),
                     max_items=int(max_items),
                     fetch=rss_fetch,
+                    source_name=str(metadata.get("source_name", "rss")),
+                    category=str(metadata.get("category", "")),
                 )
 
             collector_registry.register_factory(RSSCollector.name(), rss_factory)
@@ -402,9 +407,12 @@ class AIScout:
                     interval_seconds=source_interval_seconds,
                     priority=SourcePriority.NORMAL,
                     max_items=10,
-                    metadata={"feed_url": rss_feed_url},
+                    metadata={"feed_url": rss_feed_url, "source_name": "rss"},
                 )
             )
+            for enabled, source_id, feed_url, source_name, category in ((openai_news_enabled, "openai_news", "https://openai.com/news/rss.xml", "openai_news", "AI"), (microsoft_research_enabled, "microsoft_research", "https://www.microsoft.com/en-us/research/feed/", "microsoft_research", "Research"), (huggingface_blog_enabled, "huggingface_blog", "https://huggingface.co/blog/feed.xml", "huggingface_blog", "AI")):
+                if enabled:
+                    source_registry.register(SourceDefinition(source_id=source_id, collector_name=RSSCollector.name(), enabled=True, interval_seconds=source_interval_seconds, priority=SourcePriority.NORMAL, max_items=10, metadata={"feed_url": feed_url, "source_name": source_name, "category": category, "language": "en"}))
         if github_enabled:
             source_registry.register(
                 SourceDefinition(
@@ -1344,6 +1352,9 @@ async def main(argv: list[str] | None = None) -> None:
             output=io.StringIO(),
             rss_enabled=settings.rss_enabled,
             rss_feed_url=getattr(settings, "rss_feed_url", "https://news.ycombinator.com/rss"),
+            openai_news_enabled=getattr(settings, "openai_news_enabled", True),
+            microsoft_research_enabled=getattr(settings, "microsoft_research_enabled", True),
+            huggingface_blog_enabled=getattr(settings, "huggingface_blog_enabled", True),
             github_enabled=settings.github_enabled,
             github_token=settings.github_token,
             github_timeout=settings.github_timeout,

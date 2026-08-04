@@ -110,6 +110,9 @@ class Settings(BaseSettings):
     source_interval_seconds: float = 300.0
     hacker_news_enabled: bool = True
     rss_enabled: bool = True
+    openai_news_enabled: bool = Field(default=True, validation_alias=AliasChoices("OPENAI_NEWS_ENABLED", "openai_news_enabled"))
+    microsoft_research_enabled: bool = Field(default=True, validation_alias=AliasChoices("MICROSOFT_RESEARCH_ENABLED", "microsoft_research_enabled"))
+    huggingface_blog_enabled: bool = Field(default=True, validation_alias=AliasChoices("HUGGINGFACE_BLOG_ENABLED", "huggingface_blog_enabled"))
     github_enabled: bool = False
     reddit_enabled: bool = False
     product_hunt_enabled: bool = False

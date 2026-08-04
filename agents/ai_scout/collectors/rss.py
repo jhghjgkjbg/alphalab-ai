@@ -69,6 +69,8 @@ class RSSCollector(BaseCollector):
         *,
         timeout: float = 10.0,
         fetch: FeedLoader | None = None,
+        source_name: str = "rss",
+        category: str = "",
     ) -> None:
         parsed = urlparse(feed_url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
@@ -79,6 +81,8 @@ class RSSCollector(BaseCollector):
         self._max_items = max_items
         self._timeout = timeout
         self._fetch = fetch or self._default_fetch
+        self._source_name = source_name
+        self._category = category
 
     @classmethod
     def name(cls) -> str:
@@ -145,10 +149,12 @@ class RSSCollector(BaseCollector):
         author = self._text(entry, "creator") or self._author(entry)
         image_url = self._image_url(entry)
         payload = {"title": title, "url": link, "content": normalize_rss_text(content)}
+        if self._category:
+            payload["category"] = self._category
         if image_url:
             payload["image_url"] = image_url
         return SourceItem(
-            source="rss",
+            source=self._source_name,
             external_id=external_id,
             collected_at=datetime.now(UTC),
             payload=payload,
@@ -181,6 +187,12 @@ class RSSCollector(BaseCollector):
                 return href.strip()
             if child.text and child.text.strip():
                 return child.text.strip()
+        for child in element.iter():
+            if cls._local_name(child.tag).lower() in {"guid", "id"}:
+                candidate = (child.text or "").strip()
+                parsed = urlparse(candidate)
+                if parsed.scheme in {"http", "https"} and parsed.netloc:
+                    return candidate
         return ""
 
     @classmethod
