@@ -53,7 +53,11 @@ class Settings(BaseSettings):
     hashnode_require_pro: bool = Field(default=True, validation_alias=AliasChoices("ALPHALAB_HASHNODE_REQUIRE_PRO", "hashnode_require_pro"))
     reddit_enabled: bool = Field(default=False, validation_alias=AliasChoices("ALPHALAB_REDDIT_ENABLED", "reddit_enabled"))
     reddit_outbox_directory: str = Field(default="runtime/reddit_outbox", validation_alias=AliasChoices("ALPHALAB_REDDIT_OUTBOX_DIRECTORY", "reddit_outbox_directory"))
+    reddit_mode: Literal["draft_export", "remote_publish"] = Field(default="draft_export", validation_alias=AliasChoices("ALPHALAB_REDDIT_MODE", "reddit_mode"))
     reddit_subreddit: str = Field(default="", validation_alias=AliasChoices("ALPHALAB_REDDIT_SUBREDDIT", "reddit_subreddit"))
+    reddit_devvit_endpoint: str = Field(default="", validation_alias=AliasChoices("ALPHALAB_REDDIT_DEVVIT_ENDPOINT", "reddit_devvit_endpoint"))
+    reddit_bridge_token: str = Field(default="", repr=False, validation_alias=AliasChoices("ALPHALAB_REDDIT_BRIDGE_TOKEN", "reddit_bridge_token"))
+    reddit_http_timeout_seconds: float = Field(default=10.0, validation_alias=AliasChoices("ALPHALAB_REDDIT_HTTP_TIMEOUT_SECONDS", "reddit_http_timeout_seconds"))
     reddit_post_kind: str = Field(default="self", validation_alias=AliasChoices("ALPHALAB_REDDIT_POST_KIND", "reddit_post_kind"))
     reddit_include_tracking: bool = Field(default=False, validation_alias=AliasChoices("ALPHALAB_REDDIT_INCLUDE_TRACKING", "reddit_include_tracking"))
     reddit_require_manual_rule_review: bool = Field(default=True, validation_alias=AliasChoices("ALPHALAB_REDDIT_REQUIRE_MANUAL_RULE_REVIEW", "reddit_require_manual_rule_review"))
@@ -69,7 +73,6 @@ class Settings(BaseSettings):
     github_token: str | None = None
     github_timeout: float = 10.0
     github_max_items: int = 10
-    reddit_subreddit: str = "technology"
     reddit_limit: int = 10
     reddit_timeout: float = 10.0
     hacker_news_max_items: int = 10
@@ -106,13 +109,13 @@ class Settings(BaseSettings):
     publication_dry_run: bool = True
     source_interval_seconds: float = 300.0
     hacker_news_enabled: bool = True
-    rss_enabled: bool = False
+    rss_enabled: bool = True
     github_enabled: bool = False
     reddit_enabled: bool = False
     product_hunt_enabled: bool = False
-    devto_enabled: bool = False
-    lobsters_enabled: bool = False
-    arxiv_enabled: bool = False
+    devto_enabled: bool = True
+    lobsters_enabled: bool = True
+    arxiv_enabled: bool = True
     pre_ai_filter_enabled: bool = True
     pre_ai_max_candidates: int = 5
     pre_ai_exploration_slots: int = 1
