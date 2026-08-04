@@ -1,4 +1,5 @@
 from datetime import datetime, UTC, timedelta
+import os
 from uuid import uuid4
 from .database import SQLiteDatabase
 from datetime import datetime, UTC
@@ -156,6 +157,24 @@ class SQLitePublishedArticlesStore:
             except (TypeError, ValueError): return False
             c.execute("UPDATE subscribers SET status='confirmed',confirmed_at=?,confirmation_token_hash='',confirmation_expires_at='',updated_at=? WHERE email=?", (stamp, stamp, row["email"]))
             return True
+    def admin_subscribers(self, status=None, limit=50, offset=0, oldest=False):
+        order = "ASC" if oldest else "DESC"; clauses=[]; args=[]
+        if status: clauses.append("status=?"); args.append(status)
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        with self.database.connect() as c:
+            return [dict(r) for r in c.execute(f"SELECT email,status,created_at,confirmed_at FROM subscribers{where} ORDER BY created_at {order} LIMIT ? OFFSET ?", (*args, int(limit), int(offset)))]
+    def admin_articles(self, source=None, category=None, limit=50, offset=0, by_score=False):
+        clauses=[]; args=[]
+        if source: clauses.append("source=?"); args.append(source)
+        if category: clauses.append("category=?"); args.append(category)
+        where=(" WHERE "+" AND ".join(clauses)) if clauses else ""; order="score DESC" if by_score else "published_at DESC"
+        with self.database.connect() as c:
+            return [dict(r) for r in c.execute(f"SELECT id,title,source,category,published_at,score FROM published_articles{where} ORDER BY {order} LIMIT ? OFFSET ?", (*args, int(limit), int(offset)))]
+    def admin_summary(self):
+        with self.database.connect() as c:
+            out={"subscribers_total": c.execute("SELECT COUNT(*) FROM subscribers").fetchone()[0], "subscribers_pending": c.execute("SELECT COUNT(*) FROM subscribers WHERE status='pending'").fetchone()[0], "subscribers_confirmed": c.execute("SELECT COUNT(*) FROM subscribers WHERE status IN ('confirmed','subscribed')").fetchone()[0], "articles_total": c.execute("SELECT COUNT(*) FROM published_articles").fetchone()[0], "articles_7d": c.execute("SELECT COUNT(*) FROM published_articles WHERE published_at >= datetime('now','-7 days')").fetchone()[0]}
+            out["smtp_configured"] = bool(os.getenv("EMAIL_SMTP_HOST") and os.getenv("EMAIL_FROM_ADDRESS")); out["database_available"] = True
+            return out
 
 class SQLitePublicationStore:
     STATUSES = {"draft", "published", "failed"}

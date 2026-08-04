@@ -42,6 +42,7 @@ class HTMLResponse(_HTMLResponse):
 
 def create_app(store=None, email_sender=None):
     app=FastAPI(title="AI Scout", docs_url=None, redoc_url=None)
+    admin_sessions = set(); admin_failures = {}
     root = Path(__file__).resolve().parents[3]
     app.mount("/static", StaticFiles(directory=str(Path(__file__).with_name("static"))), name="static")
     if store is None:
@@ -86,10 +87,42 @@ def create_app(store=None, email_sender=None):
     def russian_redirect(): return RedirectResponse("/", status_code=308)
     def admin_guard(request):
         expected=os.getenv("ALPHALAB_ADMIN_TOKEN", "")
-        if expected and request.headers.get("X-Admin-Token") != expected: raise HTTPException(401, "admin authentication required")
+        if not expected: raise HTTPException(404, "not found")
+        supplied = request.headers.get("X-Admin-Token") or request.cookies.get("alphalab_admin")
+        if not supplied or not secrets.compare_digest(supplied, expected) and supplied not in admin_sessions: raise HTTPException(401, "admin authentication required")
+    def admin_headers(response): response.headers["Cache-Control"] = "no-store"; return response
+    def admin_shell(title, body):
+        nav="<nav class='admin-nav'><a href='/admin'>Dashboard</a><a href='/admin/subscribers'>Subscribers</a><a href='/admin/articles'>Articles</a><form method='post' action='/admin/logout'><button type='submit'>Logout</button></form></nav>"
+        return admin_headers(HTMLResponse(f"<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>{escape(title)}</title><link rel='stylesheet' href='/static/styles.css'></head><body>{nav}<main class='admin-page'><h1>{escape(title)}</h1>{body}</main></body></html>"))
+    @app.get("/admin/login", response_class=HTMLResponse)
+    def admin_login():
+        if not os.getenv("ALPHALAB_ADMIN_TOKEN"): raise HTTPException(404, "not found")
+        return HTMLResponse("<!doctype html><html><head><title>Admin login</title><link rel='stylesheet' href='/static/styles.css'></head><body><main class='admin-page'><h1>Admin login</h1><form method='post'><label for='admin-token'>Admin token</label><input id='admin-token' name='token' type='password' required autocomplete='current-password'><button class='button primary' type='submit'>Sign in</button><p>Invalid credentials.</p></form></main></body></html>")
+    @app.post("/admin/login")
+    async def admin_login_post(request: Request):
+        expected=os.getenv("ALPHALAB_ADMIN_TOKEN", ""); raw=await request.body(); from urllib.parse import parse_qs
+        token=parse_qs(raw.decode("utf-8"), keep_blank_values=True).get("token", [""])[0] if len(raw)<=8192 else ""
+        if not expected or not secrets.compare_digest(token, expected): raise HTTPException(401, "Invalid credentials.")
+        sid=secrets.token_urlsafe(32); admin_sessions.add(sid); response=RedirectResponse("/admin", status_code=303); response.set_cookie("alphalab_admin", sid, httponly=True, samesite="strict", secure=os.getenv("ALPHALAB_PUBLIC_BASE_URL", "").startswith("https://"), max_age=3600); return response
+    @app.post("/admin/logout")
+    def admin_logout(request: Request):
+        sid=request.cookies.get("alphalab_admin"); admin_sessions.discard(sid); response=RedirectResponse("/admin/login", status_code=303); response.delete_cookie("alphalab_admin"); return response
     @app.get("/admin", response_class=HTMLResponse)
     def admin_home(request: Request):
-        admin_guard(request); return HTMLResponse("<!doctype html><html><head><link rel='stylesheet' href='/static/styles.css'><title>AI Scout Admin</title></head><body><main><h1>AI Scout Admin</h1><nav><a href='/admin/publications'>Publications</a></nav></main></body></html>")
+        admin_guard(request)
+        stats = store.admin_summary() if hasattr(store, "admin_summary") else {}
+        body = "<section class='admin-grid'>" + "".join(f"<div class='card'><h2>{escape(str(k).replace('_',' ').title())}</h2><p>{escape(str(v))}</p></div>" for k,v in stats.items()) + "</section>"
+        return admin_shell("AI Scout Admin", body)
+    @app.get("/admin/subscribers", response_class=HTMLResponse)
+    def admin_subscribers(request: Request, status: str = "all", page: int = Query(1, ge=1), sort: str = "latest"):
+        admin_guard(request); limit=50; rows=store.admin_subscribers(status if status in {"pending","confirmed"} else None, limit, (page-1)*limit, sort == "oldest") if hasattr(store, "admin_subscribers") else []
+        items="".join(f"<tr><td>{escape(str(r['email'])[:1]+'***@'+str(r['email']).split('@')[-1])}</td><td>{escape(str(r['status']))}</td><td>{escape(str(r['created_at']))}</td><td>{escape(str(r.get('confirmed_at') or ''))}</td></tr>" for r in rows)
+        return admin_shell("Subscribers", f"<p>Filter: {escape(status)}</p><table><thead><tr><th>Email</th><th>Status</th><th>Created</th><th>Confirmed</th></tr></thead><tbody>{items or '<tr><td colspan=4>No subscribers</td></tr>'}</tbody></table>")
+    @app.get("/admin/articles", response_class=HTMLResponse)
+    def admin_articles(request: Request, source: str|None=None, category: str|None=None, page: int=Query(1, ge=1), sort: str="latest"):
+        admin_guard(request); limit=50; rows=store.admin_articles(source, category, limit, (page-1)*limit, sort == "score") if hasattr(store, "admin_articles") else []
+        items="".join(f"<tr><td><a href='/article/{quote(str(r['id']),safe='')}'>{escape(str(r['title']))}</a></td><td>{escape(str(r['source']))}</td><td>{escape(str(r['category']))}</td><td>{escape(str(r['published_at']))}</td><td>{float(r['score'] or 0):.2f}</td></tr>" for r in rows)
+        return admin_shell("Articles", f"<table><thead><tr><th>Title</th><th>Source</th><th>Category</th><th>Published</th><th>Score</th></tr></thead><tbody>{items or '<tr><td colspan=5>No articles</td></tr>'}</tbody></table>")
     @app.get("/admin/publications", response_class=HTMLResponse)
     def admin_publications(request: Request, status: str|None=None):
         admin_guard(request); rows=store.latest(10000) if hasattr(store,"latest") else list(store._items)
