@@ -17,6 +17,7 @@ from core.renderers.reddit import RedditRenderer
 from core.dedup import DedupEngine
 from core.dedup.normalize import normalize_url
 from datetime import datetime, UTC
+from core.scheduler.adaptive import AdaptivePublicationScheduler
 
 
 @dataclass(frozen=True)
@@ -67,6 +68,12 @@ class ProductionRunner:
         self.public_base_url = getattr(getattr(composition_root, "settings", None), "public_base_url", DEFAULT_PUBLIC_BASE_URL)
         self.delivery.confirm_send = self.confirm_send
         self.builder = getattr(composition_root, "builder", None) or PublicationBuilder()
+        settings = getattr(composition_root, "settings", None)
+        self.adaptive_scheduler = AdaptivePublicationScheduler(
+            getattr(settings, "publication_high_priority_score", 90.0),
+            getattr(settings, "publication_immediate_cooldown_minutes", 30.0),
+        )
+        self._adaptive_seeded = False
 
     @staticmethod
     def _select_best_candidate(items):
@@ -137,7 +144,12 @@ class ProductionRunner:
         items = self._published_filter(self._batch_deduplicate(items))
         if not items: raise ValueError("no new candidates")
         metrics.count("candidates_collected", len(items)); stages["collector"] = "ok"
-        candidate = self._select_best_candidate(items)
+        if not self._adaptive_seeded and self.store is not None and hasattr(self.store, "latest_successful_publication_at"):
+            self.adaptive_scheduler.seed_persisted_success(self.store.latest_successful_publication_at())
+            self._adaptive_seeded = True
+        immediate = self.adaptive_scheduler.select_immediate(items)
+        candidate = getattr(immediate, "item", immediate) if immediate is not None else self._select_best_candidate(items)
+        self.adaptive_decision = "immediate" if immediate is not None else "scheduled"
         reservation = None
         if self.store is not None and hasattr(self.store, "reserve"):
             payload = getattr(candidate, "payload", {}) or {}
@@ -260,6 +272,8 @@ class ProductionRunner:
                 self.store.finalize_reservation(*reservation)
             elif reservation:
                 self.store.release_reservation(*reservation)
+            if immediate is not None and report.website == "sent":
+                self.adaptive_scheduler.record_immediate_success()
             stages["delivery"] = report.overall
             if self.store is not None and hasattr(self.store, "record_delivery"):
                 details = report.details or {}

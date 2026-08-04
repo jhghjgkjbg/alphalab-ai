@@ -119,7 +119,13 @@ class SQLitePublishedArticlesStore:
     def delivery_states(self, article_id, canonical_url=None):
         return self.delivery_state(article_id=article_id, canonical_url=canonical_url)
     def latest(self,limit=50):
-        with self.database.connect() as c:return [dict(r) for r in c.execute("SELECT * FROM published_articles ORDER BY published_at DESC LIMIT ?",(limit,))]
+            with self.database.connect() as c:return [dict(r) for r in c.execute("SELECT * FROM published_articles ORDER BY published_at DESC LIMIT ?",(limit,))]
+    def latest_successful_publication_at(self):
+        with self.database.connect() as c:
+            row = c.execute("SELECT published_at FROM published_articles WHERE published_at IS NOT NULL AND published_at<>'' ORDER BY published_at DESC LIMIT 1").fetchone()
+        if not row: return None
+        try: return datetime.fromisoformat(str(row[0]).replace("Z", "+00:00")).astimezone(UTC)
+        except (TypeError, ValueError): return None
     def search(self,query,limit=50):
         with self.database.connect() as c:return [dict(r) for r in c.execute("SELECT * FROM published_articles WHERE lower(title||' '||summary||' '||source||' '||category) LIKE ? ORDER BY published_at DESC LIMIT ?",(f'%{query.lower()}%',limit))]
     def by_category(self,category): return self.search(category)

@@ -7,6 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     publish_at: datetime | None = Field(default=None, validation_alias=AliasChoices("ALPHALAB_PUBLISH_AT", "publish_at"))
+    publication_high_priority_score: float = Field(default=90.0, validation_alias=AliasChoices("PUBLICATION_HIGH_PRIORITY_SCORE", "publication_high_priority_score"))
+    publication_immediate_cooldown_minutes: float = Field(default=30.0, validation_alias=AliasChoices("PUBLICATION_IMMEDIATE_COOLDOWN_MINUTES", "publication_immediate_cooldown_minutes"))
 
     @field_validator("publish_at")
     @classmethod
