@@ -191,6 +191,13 @@ class SQLitePublishedArticlesStore:
     def analytics_breakdown(self, field, days=7):
         if field not in {"referrer_group","utm_source","utm_campaign"}: raise ValueError("invalid analytics field")
         with self.database.connect() as c: return [dict(r) for r in c.execute(f"SELECT {field} value,COUNT(*) count FROM analytics_events WHERE occurred_at >= datetime('now', ?) GROUP BY {field} ORDER BY count DESC,value", (f"-{max(1,int(days))} days",))]
+    def analytics_top_articles(self, event_type, days=7, limit=10):
+        if event_type not in {"article_view","original_source_click"}: raise ValueError("invalid event")
+        with self.database.connect() as c:
+            return [dict(r) for r in c.execute("SELECT e.article_id,COALESCE(p.title,'') title,COUNT(*) count FROM analytics_events e LEFT JOIN published_articles p ON p.id=e.article_id WHERE e.event_type=? AND e.occurred_at >= datetime('now', ?) AND e.article_id<>'' GROUP BY e.article_id,p.title ORDER BY count DESC,e.article_id LIMIT ?", (event_type,f"-{max(1,int(days))} days",min(max(int(limit),1),50)))]
+    def analytics_daily(self, days=14):
+        with self.database.connect() as c:
+            return [dict(r) for r in c.execute("SELECT substr(occurred_at,1,10) day,SUM(event_type='page_view') page_views,SUM(event_type='article_view') article_views,SUM(event_type='original_source_click') source_clicks,SUM(event_type='subscribe_success') subscribe_successes FROM analytics_events WHERE occurred_at >= datetime('now', ?) GROUP BY day ORDER BY day DESC LIMIT ?", (f"-{max(1,int(days))} days",min(max(int(days),1),31)))]
 
 class SQLitePublicationStore:
     STATUSES = {"draft", "published", "failed"}

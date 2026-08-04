@@ -61,6 +61,12 @@ def create_app(store=None, email_sender=None):
         if hasattr(store, "record_analytics_event"):
             try: store.record_analytics_event(event_type, **fields)
             except Exception: pass
+    def request_context(request):
+        from urllib.parse import urlparse, parse_qs
+        ref=str(request.headers.get("referer") or "").lower(); host=urlparse(ref).netloc
+        group="direct" if not host else next((x for x in ("google","bing","telegram","reddit","github") if x in host), "internal" if host and request.url.hostname in host else "social" if host else "other")
+        query=parse_qs(str(request.url.query)); clean=lambda k: re.sub(r"[^a-z0-9_\-]", "", (query.get(k,[""])[0] or "").strip().lower())[:100]
+        return {"referrer_group":group,"utm_source":clean("utm_source"),"utm_medium":clean("utm_medium"),"utm_campaign":clean("utm_campaign")}
     @app.get("/api/health")
     def health(): return {"status":"ok","articles":store.count() if hasattr(store,"count") else len(store._items),"storage":"sqlite" if hasattr(store,"database") else "json"}
     @app.post("/api/analytics/event", status_code=204)
@@ -97,8 +103,8 @@ def create_app(store=None, email_sender=None):
         for x in (store.latest(10000) if hasattr(store,"latest") else store._items): out[x.get("source","")]=out.get(x.get("source",""),0)+1
         return out
     @app.get("/", response_class=HTMLResponse)
-    def home():
-        record_event("page_view"); return HTMLResponse(Path(__file__).with_name("index.html").read_text(encoding="utf-8"))
+    def home(request: Request):
+        record_event("page_view", **request_context(request)); return HTMLResponse(Path(__file__).with_name("index.html").read_text(encoding="utf-8"))
     @app.get("/en", include_in_schema=False)
     def english_redirect(): return RedirectResponse("/", status_code=308)
     @app.get("/ru", include_in_schema=False)
@@ -143,7 +149,10 @@ def create_app(store=None, email_sender=None):
         return admin_shell("Articles", f"<table><thead><tr><th>Title</th><th>Source</th><th>Category</th><th>Published</th><th>Score</th></tr></thead><tbody>{items or '<tr><td colspan=5>No articles</td></tr>'}</tbody></table>")
     @app.get("/admin/analytics", response_class=HTMLResponse)
     def admin_analytics(request: Request):
-        admin_guard(request); stats=store.analytics_summary(7) if hasattr(store,"analytics_summary") else {}; body="<section class='admin-grid'>"+"".join(f"<div class='card'><h2>{escape(k.replace('_',' ').title())}</h2><p>{int(v)}</p></div>" for k,v in stats.items())+"</section>"
+        admin_guard(request); stats=store.analytics_summary(7) if hasattr(store,"analytics_summary") else {}; tops=store.analytics_top_articles("article_view") if hasattr(store,"analytics_top_articles") else []; clicks=store.analytics_top_articles("original_source_click") if hasattr(store,"analytics_top_articles") else []; daily=store.analytics_daily() if hasattr(store,"analytics_daily") else []; acq=store.analytics_breakdown("referrer_group") if hasattr(store,"analytics_breakdown") else []
+        cards="<section class='admin-grid'>"+"".join(f"<div class='card'><h2>{escape(k.replace('_',' ').title())}</h2><p>{int(v)}</p></div>" for k,v in stats.items())+"</section>"
+        table=lambda rows: "<table><thead><tr><th>Article</th><th>Count</th></tr></thead><tbody>"+"".join(f"<tr><td>{escape(str(r.get('title') or r.get('article_id')))}</td><td>{r['count']}</td></tr>" for r in rows)+"</tbody></table>"
+        body=cards+"<h2>Top article views</h2>"+table(tops)+"<h2>Top source clicks</h2>"+table(clicks)+"<h2>Acquisition</h2>"+table([{"title":r['value'] or 'direct','count':r['count']} for r in acq])+"<h2>Daily totals</h2>"+table([{"title":r['day'],'count':r['page_views']} for r in daily])
         return admin_shell("Analytics", body)
     @app.get("/admin/publications", response_class=HTMLResponse)
     def admin_publications(request: Request, status: str|None=None):
