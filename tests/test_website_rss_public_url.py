@@ -48,6 +48,8 @@ def test_article_adds_image_metadata_only_for_valid_image_url():
     assert "property='og:image'" in response.text
     assert "name='twitter:image'" in response.text
     assert "https://cdn.example/image.jpg" in response.text
+    assert "article-hero-image" in response.text
+    assert "article-kicker" in response.text
 
 
 def test_image_url_persists_and_old_schema_migrates():

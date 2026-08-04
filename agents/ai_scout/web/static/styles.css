@@ -23,6 +23,7 @@
 .related-grid{min-width:0}
 @media(max-width:700px){.article-actions{width:100%}.article-actions .button{flex:1 1 220px;min-width:0}.related-articles{margin-top:32px}}
 @media(max-width:420px){.article-actions .button{flex-basis:100%}}
+.article-hero-image{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:16px;margin:0 0 28px;background:#e8edf5}.article-kicker{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:22px;color:#718096;font-size:.85rem}.article-kicker .badge{margin:0}.article-source{font-weight:700;color:#475569}.article-score{display:inline-flex;padding:5px 10px;border-radius:999px;font-weight:800}.article-score.low{background:#f1f5f9;color:#64748b}.article-score.medium{background:#e8efff;color:#2453b8}.article-score.high{background:#ede9fe;color:#6d28d9}.article-score.excellent{background:#dcfce7;color:#166534}.article-actions .button.primary{display:inline-flex;align-items:center;gap:8px;box-shadow:0 8px 18px #2563eb2e}.article-actions .button.primary:before{content:'↗';font-size:1.1em}.article-actions .button.primary:hover{box-shadow:0 10px 24px #2563eb45;transform:translateY(-1px)}.article-actions .button.secondary{font-weight:700}@media(max-width:700px){.article-hero-image{border-radius:12px;margin-bottom:22px}.article-kicker{gap:8px;margin-bottom:18px}}
 
 /* Feed cards: keep the CTA group anchored without fixing card height. */
 .card{align-items:stretch}
