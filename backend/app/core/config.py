@@ -113,6 +113,11 @@ class Settings(BaseSettings):
     openai_news_enabled: bool = Field(default=True, validation_alias=AliasChoices("OPENAI_NEWS_ENABLED", "openai_news_enabled"))
     microsoft_research_enabled: bool = Field(default=True, validation_alias=AliasChoices("MICROSOFT_RESEARCH_ENABLED", "microsoft_research_enabled"))
     huggingface_blog_enabled: bool = Field(default=True, validation_alias=AliasChoices("HUGGINGFACE_BLOG_ENABLED", "huggingface_blog_enabled"))
+    github_blog_enabled: bool = Field(default=True, validation_alias=AliasChoices("GITHUB_BLOG_ENABLED", "github_blog_enabled"))
+    rust_blog_enabled: bool = Field(default=True, validation_alias=AliasChoices("RUST_BLOG_ENABLED", "rust_blog_enabled"))
+    go_blog_enabled: bool = Field(default=True, validation_alias=AliasChoices("GO_BLOG_ENABLED", "go_blog_enabled"))
+    docker_blog_enabled: bool = Field(default=True, validation_alias=AliasChoices("DOCKER_BLOG_ENABLED", "docker_blog_enabled"))
+    kubernetes_cve_enabled: bool = Field(default=True, validation_alias=AliasChoices("KUBERNETES_CVE_ENABLED", "kubernetes_cve_enabled"))
     github_enabled: bool = False
     reddit_enabled: bool = False
     product_hunt_enabled: bool = False

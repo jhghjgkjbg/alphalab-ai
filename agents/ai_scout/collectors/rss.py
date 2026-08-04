@@ -131,6 +131,8 @@ class RSSCollector(BaseCollector):
         if not title:
             raise ValueError("title is missing")
         link = self._link(entry)
+        if not link:
+            raise ValueError("article link is missing")
         external_id = self._text(entry, "guid") or self._text(entry, "id")
         if not external_id:
             identity = link or f"{self._feed_url}#entry-{index}-{title}"

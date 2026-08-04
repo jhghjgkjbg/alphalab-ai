@@ -146,6 +146,11 @@ class AIScout:
         openai_news_enabled: bool = False,
         microsoft_research_enabled: bool = False,
         huggingface_blog_enabled: bool = False,
+        github_blog_enabled: bool = False,
+        rust_blog_enabled: bool = False,
+        go_blog_enabled: bool = False,
+        docker_blog_enabled: bool = False,
+        kubernetes_cve_enabled: bool = False,
         rss_fetch: Callable[[str, float, int], bytes] | None = None,
         telegram_client: TelegramClient | None = None,
         telegram_bot_token: str | None = None,
@@ -410,7 +415,7 @@ class AIScout:
                     metadata={"feed_url": rss_feed_url, "source_name": "rss"},
                 )
             )
-            for enabled, source_id, feed_url, source_name, category in ((openai_news_enabled, "openai_news", "https://openai.com/news/rss.xml", "openai_news", "AI"), (microsoft_research_enabled, "microsoft_research", "https://www.microsoft.com/en-us/research/feed/", "microsoft_research", "Research"), (huggingface_blog_enabled, "huggingface_blog", "https://huggingface.co/blog/feed.xml", "huggingface_blog", "AI")):
+            for enabled, source_id, feed_url, source_name, category in ((openai_news_enabled, "openai_news", "https://openai.com/news/rss.xml", "openai_news", "AI"), (microsoft_research_enabled, "microsoft_research", "https://www.microsoft.com/en-us/research/feed/", "microsoft_research", "Research"), (huggingface_blog_enabled, "huggingface_blog", "https://huggingface.co/blog/feed.xml", "huggingface_blog", "AI"), (github_blog_enabled, "github_blog", "https://github.blog/feed/", "github_blog", "Developer Tools"), (rust_blog_enabled, "rust_blog", "https://blog.rust-lang.org/feed.xml", "rust_blog", "Open Source"), (go_blog_enabled, "go_blog", "https://go.dev/blog/feed.atom", "go_blog", "Developer Tools"), (docker_blog_enabled, "docker_blog", "https://www.docker.com/blog/feed/", "docker_blog", "Developer Tools"), (kubernetes_cve_enabled, "kubernetes_cve", "https://k8s.io/docs/reference/issues-security/official-cve-feed/feed.xml", "kubernetes_cve", "Security")):
                 if enabled:
                     source_registry.register(SourceDefinition(source_id=source_id, collector_name=RSSCollector.name(), enabled=True, interval_seconds=source_interval_seconds, priority=SourcePriority.NORMAL, max_items=10, metadata={"feed_url": feed_url, "source_name": source_name, "category": category, "language": "en"}))
         if github_enabled:
@@ -1355,6 +1360,11 @@ async def main(argv: list[str] | None = None) -> None:
             openai_news_enabled=getattr(settings, "openai_news_enabled", True),
             microsoft_research_enabled=getattr(settings, "microsoft_research_enabled", True),
             huggingface_blog_enabled=getattr(settings, "huggingface_blog_enabled", True),
+            github_blog_enabled=getattr(settings, "github_blog_enabled", True),
+            rust_blog_enabled=getattr(settings, "rust_blog_enabled", True),
+            go_blog_enabled=getattr(settings, "go_blog_enabled", True),
+            docker_blog_enabled=getattr(settings, "docker_blog_enabled", True),
+            kubernetes_cve_enabled=getattr(settings, "kubernetes_cve_enabled", True),
             github_enabled=settings.github_enabled,
             github_token=settings.github_token,
             github_timeout=settings.github_timeout,
