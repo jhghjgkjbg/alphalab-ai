@@ -103,6 +103,9 @@ class SQLitePublishedArticlesStore:
         now = datetime.now(UTC).isoformat()
         with self.database.connect() as c:
             cur = c.execute("UPDATE publication_deliveries SET status=?,external_id=?,error=?,updated_at=? WHERE article_id=? AND destination=?", (status, None if external_id is None else str(external_id), error, now, str(article_id), str(destination)))
+            if str(destination).startswith("telegram"):
+                language = "ru" if str(destination).endswith("ru") else "en"
+                c.execute("INSERT INTO telegram_delivery_events(destination,language,success,telegram_message_id,error_kind,attempted_at) VALUES(?,?,?,?,?,?)", (str(destination), language, 1 if status == "sent" else 0, str(external_id or ""), str(error or status), now))
             return cur.rowcount > 0
     def delivery_state(self, article_id=None, canonical_url=None, destination=None):
         with self.database.connect() as c:
@@ -198,6 +201,11 @@ class SQLitePublishedArticlesStore:
     def analytics_daily(self, days=14):
         with self.database.connect() as c:
             return [dict(r) for r in c.execute("SELECT substr(occurred_at,1,10) day,SUM(event_type='page_view') page_views,SUM(event_type='article_view') article_views,SUM(event_type='original_source_click') source_clicks,SUM(event_type='subscribe_success') subscribe_successes FROM analytics_events WHERE occurred_at >= datetime('now', ?) GROUP BY day ORDER BY day DESC LIMIT ?", (f"-{max(1,int(days))} days",min(max(int(days),1),31)))]
+    def purge_telegram_delivery(self, retention_days=90):
+        with self.database.connect() as c: return c.execute("DELETE FROM telegram_delivery_events WHERE attempted_at < datetime('now', ?)", (f"-{max(1,int(retention_days))} days",)).rowcount
+    def telegram_status(self):
+        with self.database.connect() as c:
+            return [dict(r) for r in c.execute("SELECT destination,language,success,telegram_message_id,error_kind,attempted_at FROM telegram_delivery_events ORDER BY attempted_at DESC LIMIT 100").fetchall()]
 
 class SQLitePublicationStore:
     STATUSES = {"draft", "published", "failed"}

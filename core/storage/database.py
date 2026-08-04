@@ -49,6 +49,10 @@ class SQLiteDatabase:
             CREATE INDEX IF NOT EXISTS idx_analytics_occurred ON analytics_events(occurred_at);
             CREATE INDEX IF NOT EXISTS idx_analytics_type ON analytics_events(event_type);
             CREATE INDEX IF NOT EXISTS idx_analytics_article ON analytics_events(article_id);
+            CREATE TABLE IF NOT EXISTS telegram_delivery_events(id INTEGER PRIMARY KEY AUTOINCREMENT,destination TEXT NOT NULL,language TEXT NOT NULL,success INTEGER NOT NULL,telegram_message_id TEXT NOT NULL DEFAULT '',error_kind TEXT NOT NULL DEFAULT '',attempted_at TEXT NOT NULL);
+            CREATE INDEX IF NOT EXISTS idx_tg_delivery_time ON telegram_delivery_events(attempted_at);
+            CREATE INDEX IF NOT EXISTS idx_tg_delivery_destination ON telegram_delivery_events(destination);
+            CREATE INDEX IF NOT EXISTS idx_tg_delivery_success ON telegram_delivery_events(success);
             CREATE TABLE IF NOT EXISTS analytics_daily(day TEXT PRIMARY KEY,received INTEGER NOT NULL DEFAULT 0,published INTEGER NOT NULL DEFAULT 0,rejected INTEGER NOT NULL DEFAULT 0,editorial_calls INTEGER NOT NULL DEFAULT 0,translation_calls INTEGER NOT NULL DEFAULT 0,duplicates INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL);
             """)
             columns = {row[1] for row in c.execute("PRAGMA table_info(published_articles)")}
