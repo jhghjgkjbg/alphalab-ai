@@ -134,6 +134,12 @@ class Settings(BaseSettings):
     gitlab_blog_enabled: bool = Field(default=True, validation_alias=AliasChoices("GITLAB_BLOG_ENABLED", "gitlab_blog_enabled"))
     python_insider_enabled: bool = Field(default=True, validation_alias=AliasChoices("PYTHON_INSIDER_ENABLED", "python_insider_enabled"))
     eclipse_foundation_enabled: bool = Field(default=True, validation_alias=AliasChoices("ECLIPSE_FOUNDATION_ENABLED", "eclipse_foundation_enabled"))
+    gitlab_enabled: bool = Field(default=True, validation_alias=AliasChoices("GITLAB_ENABLED", "gitlab_enabled"))
+    gitlab_max_items: int = Field(default=10, validation_alias=AliasChoices("GITLAB_MAX_ITEMS", "gitlab_max_items"))
+    gitlab_timeout_seconds: float = Field(default=10.0, validation_alias=AliasChoices("GITLAB_TIMEOUT_SECONDS", "gitlab_timeout_seconds"))
+    dockerhub_enabled: bool = Field(default=True, validation_alias=AliasChoices("DOCKERHUB_ENABLED", "dockerhub_enabled"))
+    dockerhub_max_items: int = Field(default=10, validation_alias=AliasChoices("DOCKERHUB_MAX_ITEMS", "dockerhub_max_items"))
+    dockerhub_timeout_seconds: float = Field(default=10.0, validation_alias=AliasChoices("DOCKERHUB_TIMEOUT_SECONDS", "dockerhub_timeout_seconds"))
     github_enabled: bool = Field(default=True, validation_alias=AliasChoices("GITHUB_ENABLED", "ALPHALAB_GITHUB_ENABLED", "github_enabled"))
     product_hunt_enabled: bool = Field(default=False, validation_alias=AliasChoices("ALPHALAB_PRODUCT_HUNT_ENABLED", "PRODUCT_HUNT_ENABLED", "product_hunt_enabled"))
     devto_enabled: bool = True
