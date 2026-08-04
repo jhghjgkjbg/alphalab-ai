@@ -206,6 +206,7 @@ class AIScout:
         hacker_news_request: Callable[..., object] | None = None,
         pypi_enabled: bool = False, pypi_packages: tuple[str, ...] = (), pypi_max_items: int = 10, pypi_timeout_seconds: float = 10.0, pypi_request: Callable[..., object] | None = None,
         npm_enabled: bool = False, npm_packages: tuple[str, ...] = (), npm_max_items: int = 10, npm_timeout_seconds: float = 10.0, npm_request: Callable[..., object] | None = None,
+        jetbrains_blog_enabled: bool = False, gitlab_blog_enabled: bool = False, python_insider_enabled: bool = False, eclipse_foundation_enabled: bool = False,
     ) -> None:
         self._event_bus = event_bus or InMemoryEventBus()
         self._output = output or sys.stdout
@@ -431,7 +432,7 @@ class AIScout:
                     metadata={"feed_url": rss_feed_url, "source_name": "rss"},
                 )
             )
-            for enabled, source_id, feed_url, source_name, category in ((openai_news_enabled, "openai_news", "https://openai.com/news/rss.xml", "openai_news", "AI"), (microsoft_research_enabled, "microsoft_research", "https://www.microsoft.com/en-us/research/feed/", "microsoft_research", "Research"), (huggingface_blog_enabled, "huggingface_blog", "https://huggingface.co/blog/feed.xml", "huggingface_blog", "AI"), (github_blog_enabled, "github_blog", "https://github.blog/feed/", "github_blog", "Developer Tools"), (rust_blog_enabled, "rust_blog", "https://blog.rust-lang.org/feed.xml", "rust_blog", "Open Source"), (go_blog_enabled, "go_blog", "https://go.dev/blog/feed.atom", "go_blog", "Developer Tools"), (docker_blog_enabled, "docker_blog", "https://www.docker.com/blog/feed/", "docker_blog", "Developer Tools"), (kubernetes_cve_enabled, "kubernetes_cve", "https://k8s.io/docs/reference/issues-security/official-cve-feed/feed.xml", "kubernetes_cve", "Security"), (cloudflare_blog_enabled, "cloudflare_blog", "https://blog.cloudflare.com/rss/", "cloudflare_blog", "Security"), (linux_foundation_enabled, "linux_foundation", "https://www.linuxfoundation.org/blog/rss.xml", "linux_foundation", "Open Source"), (arduino_blog_enabled, "arduino_blog", "https://blog.arduino.cc/feed/", "arduino_blog", "Hardware"), (raspberry_pi_blog_enabled, "raspberry_pi_blog", "https://www.raspberrypi.com/news/feed/", "raspberry_pi_blog", "Hardware")):
+            for enabled, source_id, feed_url, source_name, category in ((openai_news_enabled, "openai_news", "https://openai.com/news/rss.xml", "openai_news", "AI"), (microsoft_research_enabled, "microsoft_research", "https://www.microsoft.com/en-us/research/feed/", "microsoft_research", "Research"), (huggingface_blog_enabled, "huggingface_blog", "https://huggingface.co/blog/feed.xml", "huggingface_blog", "AI"), (github_blog_enabled, "github_blog", "https://github.blog/feed/", "github_blog", "Developer Tools"), (rust_blog_enabled, "rust_blog", "https://blog.rust-lang.org/feed.xml", "rust_blog", "Open Source"), (go_blog_enabled, "go_blog", "https://go.dev/blog/feed.atom", "go_blog", "Developer Tools"), (docker_blog_enabled, "docker_blog", "https://www.docker.com/blog/feed/", "docker_blog", "Developer Tools"), (kubernetes_cve_enabled, "kubernetes_cve", "https://k8s.io/docs/reference/issues-security/official-cve-feed/feed.xml", "kubernetes_cve", "Security"), (cloudflare_blog_enabled, "cloudflare_blog", "https://blog.cloudflare.com/rss/", "cloudflare_blog", "Security"), (linux_foundation_enabled, "linux_foundation", "https://www.linuxfoundation.org/blog/rss.xml", "linux_foundation", "Open Source"), (arduino_blog_enabled, "arduino_blog", "https://blog.arduino.cc/feed/", "arduino_blog", "Hardware"), (raspberry_pi_blog_enabled, "raspberry_pi_blog", "https://www.raspberrypi.com/news/feed/", "raspberry_pi_blog", "Hardware"), (jetbrains_blog_enabled, "jetbrains_blog", "https://blog.jetbrains.com/feed/", "jetbrains_blog", "Developer Tools"), (gitlab_blog_enabled, "gitlab_blog", "https://about.gitlab.com/atom.xml", "gitlab_blog", "Developer Tools"), (python_insider_enabled, "python_insider", "https://feeds.feedburner.com/PythonInsider", "python_insider", "Developer Tools"), (eclipse_foundation_enabled, "eclipse_foundation", "https://blogs.eclipse.org/rss.xml", "eclipse_foundation", "Open Source")):
                 if enabled:
                     source_registry.register(SourceDefinition(source_id=source_id, collector_name=RSSCollector.name(), enabled=True, interval_seconds=source_interval_seconds, priority=SourcePriority.NORMAL, max_items=10, metadata={"feed_url": feed_url, "source_name": source_name, "category": category, "language": "en"}))
         if github_enabled:
@@ -1389,6 +1390,10 @@ async def main(argv: list[str] | None = None) -> None:
             linux_foundation_enabled=getattr(settings, "linux_foundation_enabled", True),
             arduino_blog_enabled=getattr(settings, "arduino_blog_enabled", True),
             raspberry_pi_blog_enabled=getattr(settings, "raspberry_pi_blog_enabled", True),
+            jetbrains_blog_enabled=getattr(settings, "jetbrains_blog_enabled", True),
+            gitlab_blog_enabled=getattr(settings, "gitlab_blog_enabled", True),
+            python_insider_enabled=getattr(settings, "python_insider_enabled", True),
+            eclipse_foundation_enabled=getattr(settings, "eclipse_foundation_enabled", True),
             pypi_enabled=getattr(settings, "pypi_enabled", True),
             pypi_packages=tuple(x.strip() for x in getattr(settings, "pypi_packages", "").split(",") if x.strip()),
             pypi_max_items=getattr(settings, "pypi_max_items", 10),

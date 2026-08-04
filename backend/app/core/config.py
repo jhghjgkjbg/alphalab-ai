@@ -130,6 +130,10 @@ class Settings(BaseSettings):
     npm_packages: str = Field(default="openai,@anthropic-ai/sdk,@huggingface/inference,langchain,transformers.js,ollama,ai", validation_alias=AliasChoices("NPM_PACKAGES", "npm_packages"))
     npm_max_items: int = Field(default=10, validation_alias=AliasChoices("NPM_MAX_ITEMS", "npm_max_items"))
     npm_timeout_seconds: float = Field(default=10.0, validation_alias=AliasChoices("NPM_TIMEOUT_SECONDS", "npm_timeout_seconds"))
+    jetbrains_blog_enabled: bool = Field(default=True, validation_alias=AliasChoices("JETBRAINS_BLOG_ENABLED", "jetbrains_blog_enabled"))
+    gitlab_blog_enabled: bool = Field(default=True, validation_alias=AliasChoices("GITLAB_BLOG_ENABLED", "gitlab_blog_enabled"))
+    python_insider_enabled: bool = Field(default=True, validation_alias=AliasChoices("PYTHON_INSIDER_ENABLED", "python_insider_enabled"))
+    eclipse_foundation_enabled: bool = Field(default=True, validation_alias=AliasChoices("ECLIPSE_FOUNDATION_ENABLED", "eclipse_foundation_enabled"))
     github_enabled: bool = Field(default=True, validation_alias=AliasChoices("GITHUB_ENABLED", "ALPHALAB_GITHUB_ENABLED", "github_enabled"))
     product_hunt_enabled: bool = Field(default=False, validation_alias=AliasChoices("ALPHALAB_PRODUCT_HUNT_ENABLED", "PRODUCT_HUNT_ENABLED", "product_hunt_enabled"))
     devto_enabled: bool = True

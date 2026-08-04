@@ -22,6 +22,10 @@ class OfficialRSSSourcesTests(unittest.TestCase):
             linux_foundation_enabled=True,
             arduino_blog_enabled=True,
             raspberry_pi_blog_enabled=True,
+            jetbrains_blog_enabled=True,
+            gitlab_blog_enabled=True,
+            python_insider_enabled=True,
+            eclipse_foundation_enabled=True,
         )
         sources = scout._source_manager._source_registry._sources
         expected = {
@@ -37,16 +41,22 @@ class OfficialRSSSourcesTests(unittest.TestCase):
             "linux_foundation": "https://www.linuxfoundation.org/blog/rss.xml",
             "arduino_blog": "https://blog.arduino.cc/feed/",
             "raspberry_pi_blog": "https://www.raspberrypi.com/news/feed/",
+            "jetbrains_blog": "https://blog.jetbrains.com/feed/",
+            "gitlab_blog": "https://about.gitlab.com/atom.xml",
+            "python_insider": "https://feeds.feedburner.com/PythonInsider",
+            "eclipse_foundation": "https://blogs.eclipse.org/rss.xml",
         }
-        self.assertEqual(len(expected), 12)
+        self.assertEqual(len(expected), 16)
         categories = {
             "openai_news": "AI", "microsoft_research": "Research", "huggingface_blog": "AI",
             "github_blog": "Developer Tools", "rust_blog": "Open Source", "go_blog": "Developer Tools",
             "docker_blog": "Developer Tools", "kubernetes_cve": "Security",
             "cloudflare_blog": "Security", "linux_foundation": "Open Source",
             "arduino_blog": "Hardware", "raspberry_pi_blog": "Hardware",
+            "jetbrains_blog": "Developer Tools", "gitlab_blog": "Developer Tools",
+            "python_insider": "Developer Tools", "eclipse_foundation": "Open Source",
         }
-        self.assertEqual(len(sources), 14)  # HN, legacy RSS, plus these twelve definitions
+        self.assertEqual(len(sources), 18)  # HN, legacy RSS, plus these sixteen definitions
         for slug, url in expected.items():
             self.assertEqual(sources[slug].metadata["feed_url"], url)
             self.assertEqual(sources[slug].metadata["source_name"], slug)
@@ -54,7 +64,7 @@ class OfficialRSSSourcesTests(unittest.TestCase):
             self.assertEqual(sources[slug].max_items, 10)
 
     def test_each_flag_disables_only_its_source(self):
-        flags = ("openai_news_enabled", "microsoft_research_enabled", "huggingface_blog_enabled", "github_blog_enabled", "rust_blog_enabled", "go_blog_enabled", "docker_blog_enabled", "kubernetes_cve_enabled", "cloudflare_blog_enabled", "linux_foundation_enabled", "arduino_blog_enabled", "raspberry_pi_blog_enabled")
+        flags = ("openai_news_enabled", "microsoft_research_enabled", "huggingface_blog_enabled", "github_blog_enabled", "rust_blog_enabled", "go_blog_enabled", "docker_blog_enabled", "kubernetes_cve_enabled", "cloudflare_blog_enabled", "linux_foundation_enabled", "arduino_blog_enabled", "raspberry_pi_blog_enabled", "jetbrains_blog_enabled", "gitlab_blog_enabled", "python_insider_enabled", "eclipse_foundation_enabled")
         for flag in flags:
             kwargs = {name: True for name in flags}
             kwargs[flag] = False
