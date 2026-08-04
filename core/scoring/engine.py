@@ -3,6 +3,7 @@ from core.scoring.types import ScoreResult, ScorableItem
 from core.scoring.types import ScoringRequest, ScoredItem, ScoringResult, ScoringStats
 from datetime import UTC, datetime
 from core.scoring.quality import QualityScoreCalculator
+import re
 
 
 class ScoringEngine:
@@ -40,6 +41,8 @@ class ScoringEngine:
 
     def score_items(self, requests: list[ScoringRequest]) -> ScoringResult:
         scored = []
+        seen_titles: set[str] = set()
+        package_count = 0
         now = datetime.now(UTC)
         for index, request in enumerate(requests):
             freshness = request.freshness_bonus
@@ -51,6 +54,16 @@ class ScoringEngine:
                 score, _, _ = self._quality.calculate(request.item, ranking=request.ranking_score, similarity=max(0.0, 1.0 - request.similarity_penalty), now=now)
             else:
                 score = request.ranking_score + freshness + request.popularity_bonus + request.manual_boost + self._source_priority.get(str(getattr(request.item, "source", "")), request.source_priority) - request.similarity_penalty
+            title = str((payload or {}).get("title", "")).lower() if isinstance(payload, dict) else ""
+            normalized = re.sub(r"[^a-z0-9]+", "", re.sub(r"^(re|update|release|new)[:\s-]+", "", title))
+            if normalized and normalized in seen_titles:
+                score -= 0.25
+            if normalized:
+                seen_titles.add(normalized)
+            if str(getattr(request.item, "source", "")) in {"pypi", "npm", "dockerhub"}:
+                if package_count >= 2 and len(requests) > 2:
+                    continue
+                package_count += 1
             if score >= self._min_score: scored.append((ScoredItem(request.item, score), index))
         scored.sort(key=lambda pair: (-pair[0].final_score, pair[1]))
         items = tuple(pair[0] for pair in scored)

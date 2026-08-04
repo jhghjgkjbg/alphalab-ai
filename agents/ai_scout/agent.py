@@ -97,12 +97,17 @@ def production_scoring_request(item, ranking_score):
         except ValueError:
             published_at = None
     popularity = _normalized_popularity(payload)
+    source_weights = {"openai_news": .08, "microsoft_research": .08, "arxiv": .08, "deepmind": .08, "github_blog": .06, "gitlab": .06, "jetbrains_blog": .06, "rust_blog": .06, "go_blog": .06, "python_insider": .06, "docker_blog": .06, "linux_foundation": .06, "cloudflare_blog": .06, "kubernetes_cve": .06, "reddit": .03, "hacker_news": .03, "devto": .03, "lobsters": .03, "pypi": .02, "npm": .02, "dockerhub": .02}
+    freshness = number("freshness_bonus")
+    if not freshness and published_at:
+        age_hours = max(0.0, (datetime.now(UTC) - published_at).total_seconds() / 3600)
+        freshness = max(0.0, 0.05 * (0.5 ** (age_hours / 72.0)))
     return ScoringRequest(
         item,
         ranking_score=ranking_score,
         similarity_penalty=number("similarity_penalty"),
-        source_priority=number("source_priority"),
-        freshness_bonus=number("freshness_bonus"),
+        source_priority=number("source_priority") or source_weights.get(str(getattr(item, "source", "")), 0.0),
+        freshness_bonus=freshness,
         popularity_bonus=popularity,
         manual_boost=number("manual_boost"),
         published_at=published_at,
