@@ -40,7 +40,7 @@ def create_app(store=None):
         except Exception:
             store = PublishedArticlesStore(path=root / "runtime" / "published_articles.json")
     def _api_row(row):
-        return {key: value for key, value in row.items() if key not in {"en_body", "image_url"}}
+        return {key: value for key, value in row.items() if key != "en_body"}
     @app.get("/api/health")
     def health(): return {"status":"ok","articles":store.count() if hasattr(store,"count") else len(store._items),"storage":"sqlite" if hasattr(store,"database") else "json"}
     @app.get("/api/articles")
