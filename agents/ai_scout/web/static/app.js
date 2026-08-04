@@ -1,10 +1,19 @@
 (() => {
+  const applyTheme = theme => { document.documentElement.dataset.theme = theme; localStorage.setItem('alphalab-theme', theme); };
+  const savedTheme = localStorage.getItem('alphalab-theme');
+  if (savedTheme === 'dark' || savedTheme === 'light') applyTheme(savedTheme);
+  const header = document.querySelector('.site-header__inner');
+  if (header && !document.getElementById('theme-toggle')) {
+    const toggle = document.createElement('button'); toggle.id = 'theme-toggle'; toggle.type = 'button'; toggle.className = 'theme-toggle'; toggle.setAttribute('aria-label', 'Toggle dark mode'); toggle.textContent = savedTheme === 'dark' ? '☀' : '☾';
+    toggle.addEventListener('click', () => { const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; applyTheme(next); toggle.textContent = next === 'dark' ? '☀' : '☾'; }); header.append(toggle);
+  }
   document.querySelectorAll('.site-nav a').forEach(link => {
     if (link.getAttribute('href') === '/') link.classList.add('active');
   });
   const state = { page: 1, limit: 12, controller: null, requestId: 0, searchTimer: null };
   const $ = id => document.getElementById(id);
   const status = $('status'), list = $('articles'), more = $('load-more'), search = $('search');
+  if (!status || !list || !more || !search) return;
   search.setAttribute('aria-label', 'Search articles');
   const clearSearch = document.createElement('button');
   clearSearch.type = 'button'; clearSearch.className = 'search-clear'; clearSearch.setAttribute('aria-label', 'Clear search'); clearSearch.textContent = '×'; clearSearch.hidden = true;
