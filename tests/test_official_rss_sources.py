@@ -18,6 +18,10 @@ class OfficialRSSSourcesTests(unittest.TestCase):
             go_blog_enabled=True,
             docker_blog_enabled=True,
             kubernetes_cve_enabled=True,
+            cloudflare_blog_enabled=True,
+            linux_foundation_enabled=True,
+            arduino_blog_enabled=True,
+            raspberry_pi_blog_enabled=True,
         )
         sources = scout._source_manager._source_registry._sources
         expected = {
@@ -29,14 +33,20 @@ class OfficialRSSSourcesTests(unittest.TestCase):
             "go_blog": "https://go.dev/blog/feed.atom",
             "docker_blog": "https://www.docker.com/blog/feed/",
             "kubernetes_cve": "https://k8s.io/docs/reference/issues-security/official-cve-feed/feed.xml",
+            "cloudflare_blog": "https://blog.cloudflare.com/rss/",
+            "linux_foundation": "https://www.linuxfoundation.org/blog/rss.xml",
+            "arduino_blog": "https://blog.arduino.cc/feed/",
+            "raspberry_pi_blog": "https://www.raspberrypi.com/news/feed/",
         }
-        self.assertEqual(len(expected), 8)
+        self.assertEqual(len(expected), 12)
         categories = {
             "openai_news": "AI", "microsoft_research": "Research", "huggingface_blog": "AI",
             "github_blog": "Developer Tools", "rust_blog": "Open Source", "go_blog": "Developer Tools",
             "docker_blog": "Developer Tools", "kubernetes_cve": "Security",
+            "cloudflare_blog": "Security", "linux_foundation": "Open Source",
+            "arduino_blog": "Hardware", "raspberry_pi_blog": "Hardware",
         }
-        self.assertEqual(len(sources), 10)  # HN, legacy RSS, plus these eight definitions
+        self.assertEqual(len(sources), 14)  # HN, legacy RSS, plus these twelve definitions
         for slug, url in expected.items():
             self.assertEqual(sources[slug].metadata["feed_url"], url)
             self.assertEqual(sources[slug].metadata["source_name"], slug)
@@ -44,7 +54,7 @@ class OfficialRSSSourcesTests(unittest.TestCase):
             self.assertEqual(sources[slug].max_items, 10)
 
     def test_each_flag_disables_only_its_source(self):
-        flags = ("openai_news_enabled", "microsoft_research_enabled", "huggingface_blog_enabled", "github_blog_enabled", "rust_blog_enabled", "go_blog_enabled", "docker_blog_enabled", "kubernetes_cve_enabled")
+        flags = ("openai_news_enabled", "microsoft_research_enabled", "huggingface_blog_enabled", "github_blog_enabled", "rust_blog_enabled", "go_blog_enabled", "docker_blog_enabled", "kubernetes_cve_enabled", "cloudflare_blog_enabled", "linux_foundation_enabled", "arduino_blog_enabled", "raspberry_pi_blog_enabled")
         for flag in flags:
             kwargs = {name: True for name in flags}
             kwargs[flag] = False

@@ -151,6 +151,10 @@ class AIScout:
         go_blog_enabled: bool = False,
         docker_blog_enabled: bool = False,
         kubernetes_cve_enabled: bool = False,
+        cloudflare_blog_enabled: bool = False,
+        linux_foundation_enabled: bool = False,
+        arduino_blog_enabled: bool = False,
+        raspberry_pi_blog_enabled: bool = False,
         rss_fetch: Callable[[str, float, int], bytes] | None = None,
         telegram_client: TelegramClient | None = None,
         telegram_bot_token: str | None = None,
@@ -415,7 +419,7 @@ class AIScout:
                     metadata={"feed_url": rss_feed_url, "source_name": "rss"},
                 )
             )
-            for enabled, source_id, feed_url, source_name, category in ((openai_news_enabled, "openai_news", "https://openai.com/news/rss.xml", "openai_news", "AI"), (microsoft_research_enabled, "microsoft_research", "https://www.microsoft.com/en-us/research/feed/", "microsoft_research", "Research"), (huggingface_blog_enabled, "huggingface_blog", "https://huggingface.co/blog/feed.xml", "huggingface_blog", "AI"), (github_blog_enabled, "github_blog", "https://github.blog/feed/", "github_blog", "Developer Tools"), (rust_blog_enabled, "rust_blog", "https://blog.rust-lang.org/feed.xml", "rust_blog", "Open Source"), (go_blog_enabled, "go_blog", "https://go.dev/blog/feed.atom", "go_blog", "Developer Tools"), (docker_blog_enabled, "docker_blog", "https://www.docker.com/blog/feed/", "docker_blog", "Developer Tools"), (kubernetes_cve_enabled, "kubernetes_cve", "https://k8s.io/docs/reference/issues-security/official-cve-feed/feed.xml", "kubernetes_cve", "Security")):
+            for enabled, source_id, feed_url, source_name, category in ((openai_news_enabled, "openai_news", "https://openai.com/news/rss.xml", "openai_news", "AI"), (microsoft_research_enabled, "microsoft_research", "https://www.microsoft.com/en-us/research/feed/", "microsoft_research", "Research"), (huggingface_blog_enabled, "huggingface_blog", "https://huggingface.co/blog/feed.xml", "huggingface_blog", "AI"), (github_blog_enabled, "github_blog", "https://github.blog/feed/", "github_blog", "Developer Tools"), (rust_blog_enabled, "rust_blog", "https://blog.rust-lang.org/feed.xml", "rust_blog", "Open Source"), (go_blog_enabled, "go_blog", "https://go.dev/blog/feed.atom", "go_blog", "Developer Tools"), (docker_blog_enabled, "docker_blog", "https://www.docker.com/blog/feed/", "docker_blog", "Developer Tools"), (kubernetes_cve_enabled, "kubernetes_cve", "https://k8s.io/docs/reference/issues-security/official-cve-feed/feed.xml", "kubernetes_cve", "Security"), (cloudflare_blog_enabled, "cloudflare_blog", "https://blog.cloudflare.com/rss/", "cloudflare_blog", "Security"), (linux_foundation_enabled, "linux_foundation", "https://www.linuxfoundation.org/blog/rss.xml", "linux_foundation", "Open Source"), (arduino_blog_enabled, "arduino_blog", "https://blog.arduino.cc/feed/", "arduino_blog", "Hardware"), (raspberry_pi_blog_enabled, "raspberry_pi_blog", "https://www.raspberrypi.com/news/feed/", "raspberry_pi_blog", "Hardware")):
                 if enabled:
                     source_registry.register(SourceDefinition(source_id=source_id, collector_name=RSSCollector.name(), enabled=True, interval_seconds=source_interval_seconds, priority=SourcePriority.NORMAL, max_items=10, metadata={"feed_url": feed_url, "source_name": source_name, "category": category, "language": "en"}))
         if github_enabled:
@@ -1365,6 +1369,10 @@ async def main(argv: list[str] | None = None) -> None:
             go_blog_enabled=getattr(settings, "go_blog_enabled", True),
             docker_blog_enabled=getattr(settings, "docker_blog_enabled", True),
             kubernetes_cve_enabled=getattr(settings, "kubernetes_cve_enabled", True),
+            cloudflare_blog_enabled=getattr(settings, "cloudflare_blog_enabled", True),
+            linux_foundation_enabled=getattr(settings, "linux_foundation_enabled", True),
+            arduino_blog_enabled=getattr(settings, "arduino_blog_enabled", True),
+            raspberry_pi_blog_enabled=getattr(settings, "raspberry_pi_blog_enabled", True),
             github_enabled=settings.github_enabled,
             github_token=settings.github_token,
             github_timeout=settings.github_timeout,

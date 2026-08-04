@@ -118,6 +118,10 @@ class Settings(BaseSettings):
     go_blog_enabled: bool = Field(default=True, validation_alias=AliasChoices("GO_BLOG_ENABLED", "go_blog_enabled"))
     docker_blog_enabled: bool = Field(default=True, validation_alias=AliasChoices("DOCKER_BLOG_ENABLED", "docker_blog_enabled"))
     kubernetes_cve_enabled: bool = Field(default=True, validation_alias=AliasChoices("KUBERNETES_CVE_ENABLED", "kubernetes_cve_enabled"))
+    cloudflare_blog_enabled: bool = Field(default=True, validation_alias=AliasChoices("CLOUDFLARE_BLOG_ENABLED", "cloudflare_blog_enabled"))
+    linux_foundation_enabled: bool = Field(default=True, validation_alias=AliasChoices("LINUX_FOUNDATION_ENABLED", "linux_foundation_enabled"))
+    arduino_blog_enabled: bool = Field(default=True, validation_alias=AliasChoices("ARDUINO_BLOG_ENABLED", "arduino_blog_enabled"))
+    raspberry_pi_blog_enabled: bool = Field(default=True, validation_alias=AliasChoices("RASPBERRY_PI_BLOG_ENABLED", "raspberry_pi_blog_enabled"))
     github_enabled: bool = False
     reddit_enabled: bool = False
     product_hunt_enabled: bool = False
