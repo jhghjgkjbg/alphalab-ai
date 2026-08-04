@@ -1,4 +1,45 @@
 (() => {
+  const trackAnalyticsEvent = (eventType, payload = {}) => {
+    const allowed = new Set(['article_id', 'source', 'category', 'referrer_group', 'utm_source', 'utm_medium', 'utm_campaign']);
+    const body = { event_type: eventType };
+    const query = new URLSearchParams(location.search);
+    ['utm_source', 'utm_medium', 'utm_campaign'].forEach(key => { const value = query.get(key); if (value) payload[key] = value.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 100); });
+    Object.keys(payload).forEach(key => { if (allowed.has(key) && typeof payload[key] === 'string') body[key] = payload[key].slice(0, 120); });
+    try {
+      const data = JSON.stringify(body);
+      if (navigator.sendBeacon && navigator.sendBeacon('/api/analytics/event', new Blob([data], { type: 'application/json' }))) return;
+      fetch('/api/analytics/event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: data, keepalive: true }).catch(() => {});
+    } catch (_) {}
+  };
+  window.trackAnalyticsEvent = trackAnalyticsEvent;
+  if (!document.documentElement.dataset.analyticsBound) {
+    document.documentElement.dataset.analyticsBound = '1';
+    document.addEventListener('click', event => {
+      const target = event.target.closest('[data-analytics-event], .card a, .article-actions a, a');
+      if (!target) return;
+      let type = target.dataset.analyticsEvent;
+      if (!type && target.textContent.trim() === 'Original source') type = 'original_source_click';
+      if (!type && target.textContent.trim() === 'Join Telegram') type = 'telegram_click';
+      if (!type && target.textContent.trim() === 'Open RSS Feed') type = 'rss_click';
+      if (!type) return;
+      const payload = {};
+      if (target.dataset.articleId) payload.article_id = target.dataset.articleId;
+      if (type === 'original_source_click' && !payload.article_id) payload.article_id = target.closest('article')?.querySelector('a[href^="/article/"]')?.getAttribute('href')?.split('/').pop() || '';
+      if (target.dataset.source) payload.source = target.dataset.source;
+      if (target.dataset.category) payload.category = target.dataset.category;
+      trackAnalyticsEvent(type, payload);
+    }, { passive: true });
+    document.addEventListener('submit', event => {
+      if (event.target.id === 'subscribe-form') {
+        trackAnalyticsEvent('subscribe_submit');
+        const status = document.getElementById('subscribe-status');
+        if (status && !status.dataset.analyticsSuccessBound) {
+          status.dataset.analyticsSuccessBound = '1';
+          new MutationObserver(() => { if (/^Check your inbox/i.test(status.textContent) && !status.dataset.analyticsSuccess) { status.dataset.analyticsSuccess = '1'; trackAnalyticsEvent('subscribe_success'); } }).observe(status, { childList: true, characterData: true, subtree: true });
+        }
+      }
+    }, { passive: true });
+  }
   const applyTheme = theme => { document.documentElement.dataset.theme = theme; localStorage.setItem('alphalab-theme', theme); };
   const savedTheme = localStorage.getItem('alphalab-theme');
   if (savedTheme === 'dark' || savedTheme === 'light') applyTheme(savedTheme);
