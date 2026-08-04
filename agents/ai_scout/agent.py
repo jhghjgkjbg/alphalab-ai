@@ -20,6 +20,10 @@ from agents.ai_scout.collectors.reddit import RedditCollector
 from agents.ai_scout.clients.reddit_client import RedditClient
 from agents.ai_scout.clients.product_hunt_client import ProductHuntClient
 from agents.ai_scout.collectors.product_hunt import ProductHuntCollector
+from agents.ai_scout.collectors.pypi import PyPICollector
+from agents.ai_scout.collectors.npm import NpmCollector
+from agents.ai_scout.clients.pypi_client import PyPIClient
+from agents.ai_scout.clients.npm_client import NpmClient
 from agents.ai_scout.clients.devto_client import DevToClient
 from agents.ai_scout.collectors.devto import DevToCollector
 from agents.ai_scout.clients.lobsters_client import LobstersClient
@@ -200,6 +204,8 @@ class AIScout:
         hacker_news_max_items: int = HackerNewsCollector.STORY_LIMIT,
         hacker_news_timeout: float = 5.0,
         hacker_news_request: Callable[..., object] | None = None,
+        pypi_enabled: bool = False, pypi_packages: tuple[str, ...] = (), pypi_max_items: int = 10, pypi_timeout_seconds: float = 10.0, pypi_request: Callable[..., object] | None = None,
+        npm_enabled: bool = False, npm_packages: tuple[str, ...] = (), npm_max_items: int = 10, npm_timeout_seconds: float = 10.0, npm_request: Callable[..., object] | None = None,
     ) -> None:
         self._event_bus = event_bus or InMemoryEventBus()
         self._output = output or sys.stdout
@@ -329,6 +335,12 @@ class AIScout:
                 ProductHuntCollector.name(),
                 lambda **config: ProductHuntCollector(product_hunt_client, int(config.get("max_items", product_hunt_max_items))),
             )
+        if pypi_request is not None:
+            client = PyPIClient(pypi_timeout_seconds, pypi_request)
+            collector_registry.register_factory(PyPICollector.name(), lambda client=client, **config: PyPICollector(client, tuple(config.get("packages", pypi_packages)), int(config.get("max_items", pypi_max_items))))
+        if npm_request is not None:
+            client = NpmClient(npm_timeout_seconds, npm_request)
+            collector_registry.register_factory(NpmCollector.name(), lambda client=client, **config: NpmCollector(client, tuple(config.get("packages", npm_packages)), int(config.get("max_items", npm_max_items))))
         if devto_enabled is None:
             devto_enabled = devto_client is not None or devto_request is not None
         self._devto_enabled = devto_enabled
@@ -452,6 +464,10 @@ class AIScout:
                 interval_seconds=source_interval_seconds, priority=SourcePriority.NORMAL,
                 max_items=product_hunt_max_items, metadata={},
             ))
+        if pypi_enabled and pypi_request is not None:
+            source_registry.register(SourceDefinition(source_id="pypi", collector_name=PyPICollector.name(), enabled=True, interval_seconds=source_interval_seconds, priority=SourcePriority.NORMAL, max_items=pypi_max_items, metadata={"packages": pypi_packages, "category": "Developer Tools"}))
+        if npm_enabled and npm_request is not None:
+            source_registry.register(SourceDefinition(source_id="npm", collector_name=NpmCollector.name(), enabled=True, interval_seconds=source_interval_seconds, priority=SourcePriority.NORMAL, max_items=npm_max_items, metadata={"packages": npm_packages, "category": "Developer Tools"}))
         if devto_enabled:
             source_registry.register(SourceDefinition(
                 source_id="devto", collector_name=DevToCollector.name(), enabled=True,
@@ -1373,6 +1389,16 @@ async def main(argv: list[str] | None = None) -> None:
             linux_foundation_enabled=getattr(settings, "linux_foundation_enabled", True),
             arduino_blog_enabled=getattr(settings, "arduino_blog_enabled", True),
             raspberry_pi_blog_enabled=getattr(settings, "raspberry_pi_blog_enabled", True),
+            pypi_enabled=getattr(settings, "pypi_enabled", True),
+            pypi_packages=tuple(x.strip() for x in getattr(settings, "pypi_packages", "").split(",") if x.strip()),
+            pypi_max_items=getattr(settings, "pypi_max_items", 10),
+            pypi_timeout_seconds=getattr(settings, "pypi_timeout_seconds", 10.0),
+            pypi_request=source_request,
+            npm_enabled=getattr(settings, "npm_enabled", True),
+            npm_packages=tuple(x.strip() for x in getattr(settings, "npm_packages", "").split(",") if x.strip()),
+            npm_max_items=getattr(settings, "npm_max_items", 10),
+            npm_timeout_seconds=getattr(settings, "npm_timeout_seconds", 10.0),
+            npm_request=source_request,
             github_enabled=settings.github_enabled,
             github_token=settings.github_token,
             github_timeout=settings.github_timeout,
