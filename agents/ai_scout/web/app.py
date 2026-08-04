@@ -3,7 +3,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.responses import PlainTextResponse, Response
 from html import escape
-import json, os
+import json, os, re
 from datetime import datetime, timezone
 from email.utils import format_datetime
 from urllib.parse import quote, unquote
@@ -27,6 +27,9 @@ class HTMLResponse(_HTMLResponse):
             footer_start = content.find(footer_marker)
             if footer_start >= 0:
                 content = content[:footer_start] + _UNIFIED_FOOTER + content[content.find("</footer>", footer_start) + len("</footer>"):]
+        if isinstance(content, str) and "<h1>Subscribe to AlphaLab AI</h1>" in content and "id='subscribe-form'" not in content:
+            form = "<form id='subscribe-form' class='subscribe-form' novalidate><label for='subscriber-email'>Email</label><input id='subscriber-email' name='email' type='email' required maxlength='254' autocomplete='email'><label class='consent-label'><input name='consent' type='checkbox' required> I agree to receive AlphaLab AI updates by email.</label><button class='button primary' type='submit'>Subscribe</button><p id='subscribe-status' role='status' aria-live='polite'></p></form><script>(function(){const f=document.getElementById('subscribe-form'),s=document.getElementById('subscribe-status');f.addEventListener('submit',async function(e){e.preventDefault();s.textContent='Subscribing…';const b=f.querySelector('button');b.disabled=true;try{const r=await fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:f.email.value,consent:f.consent.checked})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Unable to subscribe');s.textContent=d.already_subscribed?'You are already subscribed.':'You are subscribed.';f.reset();}catch(err){s.textContent=err.message;}finally{b.disabled=false;}})})();</script>"
+            content = content.replace("</article>", form + "</article>", 1)
         super().__init__(content, *args, **kwargs)
 
 def create_app(store=None):
@@ -155,6 +158,39 @@ def create_app(store=None):
     def subscribe():
         base = os.getenv("ALPHALAB_PUBLIC_BASE_URL", "http://127.0.0.1:8080").rstrip("/")
         return HTMLResponse(f"<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Subscribe to AlphaLab AI</title><meta name='description' content='Subscribe to AlphaLab AI updates through RSS and follow the latest developments in artificial intelligence and emerging technology.'><link rel='canonical' href='{escape(base + '/subscribe', quote=True)}'><link rel='stylesheet' href='/static/styles.css'></head><body><header class='site-header'><div class='site-header__inner'><a class='site-brand' href='/' aria-label='AlphaLab AI home'><span class='site-brand__mark' aria-hidden='true'>A</span><span class='site-brand__text'><strong>AlphaLab AI</strong><small>Signal, not noise.</small></span></a><nav class='site-nav' aria-label='Primary navigation'><a href='/'>Latest News</a><a href='/about'>About</a><a class='active' href='/subscribe'>Subscribe</a><a href='/rss'>RSS</a></nav></div></header><main class='about-page'><article class='article-card'><h1>Subscribe to AlphaLab AI</h1><p>Follow the latest AI news and technology intelligence without relying on social media algorithms.</p><h2>RSS Feed</h2><p>Use the AlphaLab AI RSS feed in Feedly, Inoreader, NewsBlur, or another RSS reader.</p><p><a class='button primary' href='{escape(base + '/rss', quote=True)}'>Open RSS Feed</a></p><p>Copy the feed address and add it to your preferred RSS reader.</p><p class='feed-url'>{escape(base + '/rss')}</p><h2>Telegram</h2><p>AlphaLab AI also publishes updates through dedicated English and Russian Telegram channels.</p></article></main><footer class='site-footer'><strong>AlphaLab AI</strong><span>Signal, not noise.</span><nav aria-label='Footer navigation'><a href='/'>Latest News</a><a href='/about'>About</a><a href='/subscribe'>Subscribe</a><a href='/rss'>RSS</a></nav><small>&copy; AlphaLab AI</small></footer></body></html>")
+    @app.post("/api/subscribe")
+    async def subscribe_api(request: Request):
+        if int(request.headers.get("content-length", "0") or 0) > 16_384:
+            raise HTTPException(413, "request too large")
+        try:
+            raw = await request.body()
+            if len(raw) > 16_384:
+                raise HTTPException(413, "request too large")
+            content_type = request.headers.get("content-type", "").split(";", 1)[0].lower()
+            if content_type == "application/json":
+                payload = json.loads(raw.decode("utf-8"))
+            elif content_type == "application/x-www-form-urlencoded":
+                from urllib.parse import parse_qs
+                values = parse_qs(raw.decode("utf-8"), keep_blank_values=True)
+                payload = {key: values.get(key, [""])[0] for key in values}
+            else:
+                raise HTTPException(415, "unsupported content type")
+        except HTTPException:
+            raise
+        except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
+            raise HTTPException(400, "invalid request")
+        email = str(payload.get("email") or "").strip().lower() if isinstance(payload, dict) else ""
+        consent = payload.get("consent") if isinstance(payload, dict) else False
+        consent_ok = consent is True or str(consent).strip().lower() in {"1", "true", "yes", "on"}
+        if len(email) > 254 or not re.fullmatch(r"[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+", email) or not consent_ok:
+            raise HTTPException(422, "valid email and consent are required")
+        if not hasattr(store, "subscribe"):
+            raise HTTPException(500, "subscription storage unavailable")
+        try:
+            created = store.subscribe(email)
+        except Exception:
+            raise HTTPException(500, "subscription unavailable")
+        return {"ok": True, "already_subscribed": not created}
     @app.get("/robots.txt", response_class=PlainTextResponse)
     def robots(): return f"User-agent: *\nAllow: /\n\nSitemap: {os.getenv('ALPHALAB_PUBLIC_BASE_URL','http://127.0.0.1:8080').rstrip('/')}/sitemap.xml\n"
     @app.get("/sitemap.xml")

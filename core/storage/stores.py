@@ -122,6 +122,16 @@ class SQLitePublishedArticlesStore:
     def by_source(self,source): return self.search(source)
     def count(self):
         with self.database.connect() as c:return c.execute("SELECT COUNT(*) FROM published_articles").fetchone()[0]
+    def subscribe(self, email, consent_at=None):
+        """Idempotently store a consented subscriber."""
+        now = datetime.now(UTC).isoformat()
+        consent = consent_at or now
+        with self.database.connect() as c:
+            cur = c.execute(
+                "INSERT OR IGNORE INTO subscribers(email,status,consent_at,created_at,updated_at) VALUES(?,?,?,?,?)",
+                (str(email), "subscribed", str(consent), now, now),
+            )
+            return bool(cur.rowcount)
 
 class SQLitePublicationStore:
     STATUSES = {"draft", "published", "failed"}

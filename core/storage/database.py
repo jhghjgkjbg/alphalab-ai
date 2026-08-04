@@ -44,6 +44,7 @@ class SQLiteDatabase:
             CREATE TABLE IF NOT EXISTS analytics_counters(name TEXT PRIMARY KEY,value INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS analytics_sources(source TEXT PRIMARY KEY,received INTEGER NOT NULL DEFAULT 0,published INTEGER NOT NULL DEFAULT 0,rejected INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS analytics_categories(category TEXT PRIMARY KEY,published INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS subscribers(email TEXT PRIMARY KEY,status TEXT NOT NULL DEFAULT 'subscribed',consent_at TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS analytics_daily(day TEXT PRIMARY KEY,received INTEGER NOT NULL DEFAULT 0,published INTEGER NOT NULL DEFAULT 0,rejected INTEGER NOT NULL DEFAULT 0,editorial_calls INTEGER NOT NULL DEFAULT 0,translation_calls INTEGER NOT NULL DEFAULT 0,duplicates INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL);
             """)
             columns = {row[1] for row in c.execute("PRAGMA table_info(published_articles)")}

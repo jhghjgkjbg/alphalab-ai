@@ -53,3 +53,7 @@
 .search-clear:hover{color:var(--ink)}
 .search-clear:focus-visible,.empty-clear:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .empty-clear{margin-top:.75rem}
+.subscribe-form{display:grid;gap:10px;max-width:520px;margin:28px 0;padding-top:8px}
+.subscribe-form input[type=email]{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:8px;font:inherit}
+.consent-label{display:flex;gap:8px;align-items:flex-start;font-size:.9rem;color:var(--muted)}
+.subscribe-form button:disabled{opacity:.6;cursor:wait}
