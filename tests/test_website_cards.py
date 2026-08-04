@@ -26,3 +26,13 @@ def test_card_rendering_contract_and_empty_fields_are_safe():
     assert "validImage" in script and "category-badge" in script and "score-badge" in script
     assert "relativeTime" in script
     assert "x.image_url" in script
+
+
+def test_homepage_hero_and_responsive_card_layout_are_present():
+    html = open("agents/ai_scout/web/index.html", encoding="utf-8").read()
+    css = open("agents/ai_scout/web/static/styles.css", encoding="utf-8").read()
+    assert "What matters in AI" in html
+    assert "grid-template-columns:repeat(3" in css
+    assert "@media(max-width:1024px)" in css
+    assert "@media(max-width:600px)" in css
+    assert "id=\"search\"" in html and "id=\"category\"" in html and "id=\"source\"" in html
