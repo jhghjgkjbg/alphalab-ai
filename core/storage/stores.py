@@ -205,7 +205,9 @@ class SQLitePublishedArticlesStore:
         with self.database.connect() as c: return c.execute("DELETE FROM telegram_delivery_events WHERE attempted_at < datetime('now', ?)", (f"-{max(1,int(retention_days))} days",)).rowcount
     def telegram_status(self):
         with self.database.connect() as c:
-            return [dict(r) for r in c.execute("SELECT destination,language,success,telegram_message_id,error_kind,attempted_at FROM telegram_delivery_events ORDER BY attempted_at DESC LIMIT 100").fetchall()]
+            rows=[dict(r) for r in c.execute("SELECT destination,language,success,telegram_message_id,error_kind,attempted_at FROM telegram_delivery_events ORDER BY attempted_at DESC LIMIT 100").fetchall()]
+            recent=c.execute("SELECT SUM(success=1) success_count,SUM(success=0) failure_count FROM telegram_delivery_events WHERE attempted_at >= datetime('now','-1 day')").fetchone()
+            return {"rows":rows,"success_24h":int(recent[0] or 0),"failure_24h":int(recent[1] or 0)}
 
 class SQLitePublicationStore:
     STATUSES = {"draft", "published", "failed"}

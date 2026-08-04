@@ -45,7 +45,7 @@ class PublicationCompositionRoot:
         return self.engine
 
     @classmethod
-    def from_settings(cls, settings):
+    def from_settings(cls, settings, reddit_remote_transport=None):
         """Assemble the shared production graph from the configured Settings."""
         from core.ai_enrichment import AIEnrichmentEngine, AIProviderRegistry
         from core.ai_enrichment.engine import NoOpAIProvider
@@ -56,6 +56,7 @@ class PublicationCompositionRoot:
         from core.publishers.website import WebsitePublisher
         from core.publishers.hashnode import HashnodePublisher
         from core.publishers.reddit import RedditDraftPublisher
+        from core.publishers.reddit_remote import RedditRemotePublisher, RedditBridgeHttpTransport
         from core.publishers.telegram import TelegramViewPublisher
         from core.delivery import DeliveryOrchestrator
         from core.storage import SQLitePublishedArticlesStore
@@ -91,8 +92,12 @@ class PublicationCompositionRoot:
         import importlib
         TelegramClient = importlib.import_module("agents.ai_scout.publishers.telegram_client").TelegramClient
         retry = dict(max_attempts=getattr(settings, "telegram_max_attempts", 3), retry_base_seconds=getattr(settings, "telegram_retry_base_seconds", 1.0), retry_max_seconds=getattr(settings, "telegram_retry_max_seconds", 15.0))
-        en_client = TelegramClient(str(getattr(settings, "telegram_bot_token", "")), str(getattr(settings, "telegram_en_chat_id", "")), 3, request, **retry)
-        ru_client = TelegramClient(str(getattr(settings, "telegram_bot_token", "")), str(getattr(settings, "telegram_ru_chat_id", "")), 3, request, **retry)
+        import os
+        try: telegram_timeout = float(os.getenv("TELEGRAM_REQUEST_TIMEOUT_SECONDS", getattr(settings, "telegram_request_timeout_seconds", 3)))
+        except (TypeError, ValueError): telegram_timeout = 3.0
+        if telegram_timeout <= 0: telegram_timeout = 3.0
+        en_client = TelegramClient(str(getattr(settings, "telegram_bot_token", "")), str(getattr(settings, "telegram_en_chat_id", "")), telegram_timeout, request, **retry)
+        ru_client = TelegramClient(str(getattr(settings, "telegram_bot_token", "")), str(getattr(settings, "telegram_ru_chat_id", "")), telegram_timeout, request, **retry)
         en_publisher, ru_publisher = TelegramViewPublisher(en_client), TelegramViewPublisher(ru_client)
         analytics_store = DistributionEventStore()
         delivery = DeliveryOrchestrator(website_publisher, en_publisher, telegram_publisher_ru=ru_publisher, analytics_store=analytics_store)
@@ -150,7 +155,12 @@ class PublicationCompositionRoot:
             from core.renderers.reddit import normalize_subreddit
             subreddit=normalize_subreddit(getattr(settings,"reddit_subreddit","")); kind=getattr(settings,"reddit_post_kind","self")
             if kind not in {"self","link"}: raise ValueError("reddit_invalid_post_kind")
-            reddit_publisher=RedditDraftPublisher(getattr(settings,"reddit_outbox_directory","runtime/reddit_outbox"), subreddit, kind, getattr(settings,"reddit_include_tracking",False), getattr(settings,"reddit_require_manual_rule_review",True))
+            mode = str(getattr(settings, "reddit_mode", "draft_export"))
+            if mode == "remote_publish":
+                transport = reddit_remote_transport or RedditBridgeHttpTransport(getattr(settings, "reddit_devvit_endpoint", ""), getattr(settings, "reddit_bridge_token", ""), getattr(settings, "reddit_http_timeout_seconds", 10))
+                reddit_publisher = RedditRemotePublisher(transport)
+            else:
+                reddit_publisher=RedditDraftPublisher(getattr(settings,"reddit_outbox_directory","runtime/reddit_outbox"), subreddit, kind, getattr(settings,"reddit_include_tracking",False), getattr(settings,"reddit_require_manual_rule_review",True))
         store = SQLitePublishedArticlesStore()
         root = cls(publisher=en_publisher, renderer=telegram_renderer, articles_store=store, ai_enrichment_engine=ai_engine, provider_registry=registry, selected_provider=provider, website_renderer=website_renderer, telegram_renderer=telegram_renderer, website_publisher=website_publisher, telegram_publisher_en=en_publisher, telegram_publisher_ru=ru_publisher, x_publisher=x_publisher, x_enabled=x_enabled, linkedin_publisher=linkedin_publisher, linkedin_enabled=linkedin_enabled, medium_publisher=medium_publisher, medium_enabled=medium_enabled, substack_publisher=substack_publisher, substack_enabled=substack_enabled, substack_audience=getattr(settings, "substack_default_audience", "everyone"), substack_publication_url=getattr(settings, "substack_publication_url", ""), devto_publisher=devto_publisher, devto_enabled=devto_enabled, devto_publish=getattr(settings, "devto_publish", False), devto_organization_id=getattr(settings, "devto_organization_id", None), hashnode_publisher=hashnode_publisher, hashnode_enabled=hashnode_enabled, reddit_publisher=reddit_publisher, reddit_enabled=reddit_enabled, delivery_orchestrator=delivery, language_variant_engine=LanguageVariantEngine())
         root.publish_at = getattr(settings, "publish_at", None)

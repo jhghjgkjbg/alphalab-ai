@@ -55,7 +55,7 @@ def create_app(store=None, email_sender=None):
         try: store.purge_analytics(int(os.getenv("ALPHALAB_ANALYTICS_RETENTION_DAYS", "90")))
         except Exception: pass
     if hasattr(store, "purge_telegram_delivery"):
-        try: store.purge_telegram_delivery(int(os.getenv("TELEGRAM_DELIVERY_RETENTION_DAYS", "90")))
+        try: days=int(os.getenv("TELEGRAM_DELIVERY_RETENTION_DAYS", "90")); days=days if days > 0 else 90; store.purge_telegram_delivery(days)
         except Exception: pass
     def _api_row(row):
         return {key: value for key, value in row.items() if key != "en_body"}
@@ -138,8 +138,8 @@ def create_app(store=None, email_sender=None):
     def admin_home(request: Request):
         admin_guard(request)
         stats = store.admin_summary() if hasattr(store, "admin_summary") else {}
-        tg = store.telegram_status() if hasattr(store, "telegram_status") else []; successes=[r for r in tg if r["success"]]; failures=[r for r in tg if not r["success"]]
-        tg_html=f"<section class='admin-grid'><div class='card'><h2>Telegram EN configured</h2><p>{'yes' if os.getenv('ALPHALAB_TELEGRAM_BOT_TOKEN') and os.getenv('ALPHALAB_TELEGRAM_EN_CHAT_ID') else 'no'}</p></div><div class='card'><h2>Telegram RU configured</h2><p>{'yes' if os.getenv('ALPHALAB_TELEGRAM_BOT_TOKEN') and os.getenv('ALPHALAB_TELEGRAM_RU_CHAT_ID') else 'no'}</p></div><div class='card'><h2>Recent successes</h2><p>{len(successes)}</p></div><div class='card'><h2>Recent failures</h2><p>{len(failures)}</p></div></section>"
+        tg = store.telegram_status() if hasattr(store, "telegram_status") else {"rows":[],"success_24h":0,"failure_24h":0}; rows=tg.get("rows",[]); successes=[r for r in rows if r["success"]]; failures=[r for r in rows if not r["success"]]; en_ok=next((r["attempted_at"] for r in successes if r["language"]=="en"), "none"); ru_ok=next((r["attempted_at"] for r in successes if r["language"]=="ru"), "none"); last_fail=failures[0] if failures else {}
+        tg_html=f"<section class='admin-grid'><div class='card'><h2>Telegram EN configured</h2><p>{'yes' if os.getenv('ALPHALAB_TELEGRAM_BOT_TOKEN') and os.getenv('ALPHALAB_TELEGRAM_EN_CHAT_ID') else 'no'}</p></div><div class='card'><h2>Telegram RU configured</h2><p>{'yes' if os.getenv('ALPHALAB_TELEGRAM_BOT_TOKEN') and os.getenv('ALPHALAB_TELEGRAM_RU_CHAT_ID') else 'no'}</p></div><div class='card'><h2>Last EN success</h2><p>{escape(en_ok)}</p></div><div class='card'><h2>Last RU success</h2><p>{escape(ru_ok)}</p></div><div class='card'><h2>Last failure</h2><p>{escape(str(last_fail.get('attempted_at','none')))} {escape(str(last_fail.get('error_kind','')))}</p></div><div class='card'><h2>Deliveries last 24h</h2><p>success {tg.get('success_24h',0)} / failure {tg.get('failure_24h',0)}</p></div></section>"
         body = "<section class='admin-grid'>" + "".join(f"<div class='card'><h2>{escape(str(k).replace('_',' ').title())}</h2><p>{escape(str(v))}</p></div>" for k,v in stats.items()) + "</section>" + tg_html
         return admin_shell("AI Scout Admin", body)
     @app.get("/admin/subscribers", response_class=HTMLResponse)
