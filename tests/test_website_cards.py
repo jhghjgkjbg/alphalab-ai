@@ -46,4 +46,4 @@ def test_card_highlights_use_existing_summary_with_safe_fallback():
     css = open("agents/ai_scout/web/static/styles.css", encoding="utf-8").read()
     assert "function highlights" in script
     assert "card-highlights" in script and "card-highlights" in css
-    assert "slice(0, 3)" in script
+    assert "slice(0, 2)" in script
