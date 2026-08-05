@@ -1110,6 +1110,15 @@ async def main(argv: list[str] | None = None) -> None:
         scout_kwargs = {name: getattr(settings, name) for name in inspect.signature(AIScout).parameters if hasattr(settings, name)}
         scout = AIScout(**scout_kwargs)
         results = await scout._source_manager.run_enabled()
+        configured = scout._source_manager._source_registry.all()
+        enabled = scout._source_manager._source_registry.enabled()
+        print(f"configured_sources_count={len(configured)}")
+        print(f"enabled_sources_count={len(enabled)}")
+        print(f"called_sources_count={len(results)}")
+        print(f"producing_sources_count={sum(1 for result in results if result.items)}")
+        for result in results:
+            failure = "none" if not result.error_count else "collection_failed"
+            print(f"source_collection_result={result.source_id},called=yes,produced={len(result.items)},failure_kind={failure}")
         items = [i for r in results for i in r.items if isinstance(getattr(i, "payload", None), dict) and i.payload.get("title")]
         # Reuse the existing deterministic ranking and scoring components before
         # the production runner builds the selected Publication.  The score is
