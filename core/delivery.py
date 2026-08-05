@@ -108,5 +108,17 @@ class DeliveryOrchestrator:
             except Exception as exc:
                 statuses[name] = "unknown" if "timeout" in type(exc).__name__.lower() else "failed"; reasons[name] = type(exc).__name__
                 details[name] = {"status": statuses[name], "external_id": None, "error": reasons[name]}
-        overall = "sent" if any(v == "sent" for v in statuses.values()) and not any(v == "failed" for v in statuses.values()) else "failed" if any(v == "failed" for v in statuses.values()) else "blocked"
+        # Aggregate only destinations that are enabled and have an instantiated
+        # publisher. Optional, disabled, or unconfigured destinations must not
+        # turn an otherwise successful delivery into a failure.
+        active = [binding.destination for binding in bindings if getattr(c, binding.destination, True if self.bindings else False) and binding.publisher is not None]
+        active_statuses = [statuses.get(name, "blocked") for name in active]
+        if not active_statuses:
+            overall = "blocked"
+        elif any(status == "failed" for status in active_statuses):
+            overall = "failed"
+        elif all(status == "sent" for status in active_statuses):
+            overall = "sent"
+        else:
+            overall = "blocked"
         return DeliveryReport(**{k: statuses.get(k, "blocked") for k in ("website", "telegram_en", "telegram_ru")}, overall=overall, failure_reasons=reasons, details=details, statuses=statuses)
