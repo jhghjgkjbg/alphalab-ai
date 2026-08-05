@@ -131,6 +131,22 @@ class ProductionRunner:
                 result.append(item)
         return tuple(result)
 
+    @staticmethod
+    def _diagnose_batch(items):
+        from collections import Counter
+        counts = Counter(str(getattr(item, "source", "") or (getattr(item, "payload", {}) or {}).get("source", "")) for item in items)
+        print("source_batch_counts=" + ",".join(f"{source}:{counts[source]}" for source in sorted(counts)))
+        print("source_candidates_ranked=" + ",".join(str(getattr(item, "source", "") or (getattr(item, "payload", {}) or {}).get("source", "")) for item in items))
+        for item in items:
+            payload = getattr(item, "payload", {}) or {}
+            summary = str(payload.get("summary") or payload.get("description") or "")
+            content = str(payload.get("content") or payload.get("body") or "")
+            title = str(payload.get("title") or "")
+            candidate_id = str(getattr(item, "external_id", None) or payload.get("id") or "")
+            title_only = "yes" if summary.strip() == title.strip() and not content.strip() else "no"
+            source = str(getattr(item, "source", "") or payload.get("source", ""))
+            print(f"source_candidate_content={candidate_id},{source},summary_length={len(summary.strip())},content_length={len(content.strip())},title_only={title_only}")
+
     def _finalize_analytics(self, article_id, destination, row):
         analytics = getattr(self.delivery, "analytics_store", None)
         if analytics is None or not row:
@@ -318,6 +334,7 @@ class ProductionRunner:
         candidates = self._published_filter(self._batch_deduplicate(items))
         if not candidates:
             raise ValueError("no new candidates")
+        self._diagnose_batch(candidates)
         for candidate in candidates:
             candidate_id = str(getattr(candidate, "external_id", None) or (getattr(candidate, "payload", {}) or {}).get("id") or "")
             try:
@@ -326,6 +343,8 @@ class ProductionRunner:
                 reason = str(exc)
                 if reason in {"publication_blocked_empty_content", "candidate already reserved"}:
                     print(f"candidate_skipped_unusable_content={candidate_id}")
+                    symbolic = "reserved" if reason == "candidate already reserved" else "unusable_content"
+                    print(f"source_candidate_skip_reason={candidate_id},{symbolic}")
                     continue
                 raise
         print("publication_result=no_usable_candidate")
