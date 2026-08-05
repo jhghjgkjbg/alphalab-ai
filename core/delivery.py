@@ -113,6 +113,12 @@ class DeliveryOrchestrator:
         # turn an otherwise successful delivery into a failure.
         active = [binding.destination for binding in bindings if getattr(c, binding.destination, True if self.bindings else False) and binding.publisher is not None]
         active_statuses = [statuses.get(name, "blocked") for name in active]
+        for binding in bindings:
+            enabled = bool(getattr(c, binding.destination, True if self.bindings else False))
+            if enabled:
+                status = statuses.get(binding.destination, "blocked")
+                reason = reasons.get(binding.destination, "") or "none"
+                print(f"destination={binding.destination} instantiated={'yes' if binding.publisher is not None else 'no'} enabled={'yes' if enabled else 'no'} result={status} failure_kind={reason}")
         if not active_statuses:
             overall = "blocked"
         elif any(status == "failed" for status in active_statuses):
