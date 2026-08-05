@@ -71,6 +71,31 @@ class OpenAIProviderVerificationTests(unittest.TestCase):
         response = type("Response", (), {"output_text": "", "usage": None, "id": "", "status": "completed"})()
         raw = OpenAIProvider(api_key="test-only", client=_Client(response)).enrich(self.prompt)
         self.assertEqual(DefaultResponseParser().parse(raw).short_summary, "")
+        self.assertEqual(OpenAIProvider(api_key="test-only", client=_Client(response)).last_failure_kind, None)
+
+    def test_credit_balance_exhausted_is_payment_required(self):
+        class Failure(Exception):
+            status_code = 402
+            body = {"error": {"type": "insufficient_quota", "code": "credit_balance_exhausted"}}
+        class Failing:
+            class responses:
+                @staticmethod
+                def create(**kwargs): raise Failure()
+        provider = OpenAIProvider(api_key="test-only", client=Failing())
+        provider.enrich(self.prompt)
+        self.assertEqual(provider.last_failure_kind, "payment_required")
+
+    def test_insufficient_quota_is_payment_required(self):
+        class Failure(Exception):
+            status_code = 402
+            body = {"error": {"type": "insufficient_quota", "code": "quota"}}
+        class Failing:
+            class responses:
+                @staticmethod
+                def create(**kwargs): raise Failure()
+        provider = OpenAIProvider(api_key="test-only", client=Failing())
+        provider.enrich(self.prompt)
+        self.assertEqual(provider.last_failure_kind, "payment_required")
 
     def test_fenced_json_parses(self):
         raw = RawAIResponse(raw_text="```json\n{\"short_summary\":\"ok\"}\n```")
