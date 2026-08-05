@@ -1106,7 +1106,10 @@ async def main(argv: list[str] | None = None) -> None:
         from core.ranking import RankingEngineV1
         from core.scoring.engine import ScoringEngine
         from core.scoring.types import ScoringRequest
-        results = await AIScout()._source_manager.run_enabled()
+        import inspect
+        scout_kwargs = {name: getattr(settings, name) for name in inspect.signature(AIScout).parameters if hasattr(settings, name)}
+        scout = AIScout(**scout_kwargs)
+        results = await scout._source_manager.run_enabled()
         items = [i for r in results for i in r.items if isinstance(getattr(i, "payload", None), dict) and i.payload.get("title")]
         # Reuse the existing deterministic ranking and scoring components before
         # the production runner builds the selected Publication.  The score is
