@@ -54,6 +54,12 @@ class ProductionRunner:
             return cyr > latin
         return latin > cyr
 
+    @staticmethod
+    def _usable_content(title, content):
+        title = " ".join(str(title or "").split())
+        content = " ".join(str(content or "").split())
+        return bool(content and content != title)
+
     def __init__(self, store=None, delivery=None, provider=None, composition_root=None, confirm_send=False, reservation_ttl_seconds=1800, pending_ttl_seconds=1800):
         self.composition_root = composition_root
         self.store = store or getattr(composition_root, "articles_store", None)
@@ -170,6 +176,15 @@ class ProductionRunner:
         # variants consumed by renderers.  Renderers intentionally know
         # nothing about provider-specific AIContext objects.
             context = getattr(publication, "ai_context", None)
+            if self.ai_engine:
+                ai_summary = ((getattr(context, "long_summary", "") or getattr(context, "short_summary", "") or getattr(context, "en_body", "")) if context else "")
+                if not self._usable_content(publication.title, ai_summary):
+                    failure_kind = getattr(self.provider, "last_failure_kind", None) or "unknown"
+                    print("ai_enrichment_failed")
+                    if failure_kind == "payment_required":
+                        print("ai_provider_payment_required")
+                    print("publication_blocked_empty_content")
+                    raise ValueError("publication_blocked_empty_content")
             if context and (getattr(context, "short_summary", "") or getattr(context, "long_summary", "") or getattr(context, "headline_suggestions", ())):
                 summary = getattr(context, "long_summary", "") or getattr(context, "short_summary", "")
                 suggestions = getattr(context, "headline_suggestions", ()) or ()
@@ -183,6 +198,10 @@ class ProductionRunner:
                 ru_body = getattr(context, "ru_body", "") or ""
                 variants = {lang: replace(v, title=(title if lang != "ru" else (ru_title or v.title)), summary=(summary if lang != "ru" else (ru_body or v.summary)), body=((v.body or summary or publication.summary) if lang != "ru" else (ru_body or v.body or v.summary))) for lang, v in publication.variants.items()}
                 publication = replace(publication, title=title, summary=summary, variants=variants)
+            en_variant = publication.variants.get("en")
+            if not en_variant or not self._usable_content(en_variant.title, en_variant.summary or en_variant.body):
+                print("publication_blocked_empty_content")
+                raise ValueError("publication_blocked_empty_content")
         # Channel eligibility is evaluated after enrichment and variant
         # materialization, so RU eligibility can use the actual publication.
             has_ru_variant = "ru" in (getattr(publication, "variants", {}) or {})

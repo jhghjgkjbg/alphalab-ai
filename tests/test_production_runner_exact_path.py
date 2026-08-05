@@ -27,6 +27,10 @@ class _AI:
         ctx = AIContext(short_summary="Enriched English summary", long_summary="Enriched English summary", confidence=.9, headline_suggestions=("Enriched English headline",), ru_title="Обогащённый русский заголовок", ru_body="Обогащённое русское резюме")
         return replace(publication, ai_context=ctx, score=.84)
 
+class _EmptyAI:
+    def enrich(self, publication):
+        return replace(publication, ai_context=AIContext())
+
 
 class _Website:
     def __init__(self, trace): self.trace = trace
@@ -46,13 +50,13 @@ class ExactProductionPathTests(unittest.TestCase):
         self.assertFalse(ProductionRunner._valid_text("   ", "en"))
         self.assertFalse(ProductionRunner._valid_text("   ", "ru"))
 
-    def _run(self, legacy=False):
+    def _run(self, legacy=False, ai=None):
         td = tempfile.mkdtemp()
         try:
             store = SQLitePublishedArticlesStore(SQLiteDatabase(Path(td) / "test.db"))
             item = SimpleNamespace(external_id="unique-article", source="test", payload={"title":"Original", "summary":"Original summary", "url":"https://example.test/unique", "category":"AI", "published_at":"2026-07-21T00:00:00+00:00"})
             if legacy: store.append({"id":"unique-article", "title":"Original", "summary":"", "url":"https://example.test/unique", "score":0})
-            trace=[]; ai=_AI(); en=_Publisher("telegram_en", "en-chat", trace); ru=_Publisher("telegram_ru", "ru-chat", trace); website=_Website(trace)
+            trace=[]; ai=ai or _AI(); en=_Publisher("telegram_en", "en-chat", trace); ru=_Publisher("telegram_ru", "ru-chat", trace); website=_Website(trace)
             delivery=DeliveryOrchestrator(website, en, telegram_publisher_ru=ru, confirm_send=True)
             root=SimpleNamespace(builder=PublicationBuilder(), articles_store=store, ai_enrichment_engine=ai, delivery_orchestrator=delivery)
             result=asyncio.run(ProductionRunner(composition_root=root, confirm_send=True).run([item]))
@@ -62,6 +66,21 @@ class ExactProductionPathTests(unittest.TestCase):
             import shutil
             shutil.rmtree(td, ignore_errors=True)
             raise
+
+    def test_empty_ai_result_blocks_delivery_and_persistence(self):
+        td = tempfile.mkdtemp()
+        try:
+            store = SQLitePublishedArticlesStore(SQLiteDatabase(Path(td) / "empty.db"))
+            item = SimpleNamespace(external_id="empty-article", source="test", payload={"title": "Original", "summary": "Original summary", "url": "https://example.test/empty"})
+            trace=[]; website=_Website(trace); delivery=DeliveryOrchestrator(website, None, confirm_send=True)
+            root=SimpleNamespace(builder=PublicationBuilder(), articles_store=store, ai_enrichment_engine=_EmptyAI(), delivery_orchestrator=delivery)
+            with self.assertRaisesRegex(ValueError, "publication_blocked_empty_content"):
+                asyncio.run(ProductionRunner(composition_root=root, confirm_send=True).run([item]))
+            self.assertEqual(trace, [])
+            self.assertEqual(store.latest(), [])
+        finally:
+            import shutil
+            shutil.rmtree(td, ignore_errors=True)
 
     def test_exact_path_sends_each_channel_once_and_persists_enriched_row(self):
         result, ai, en, ru, store, td = self._run()

@@ -34,6 +34,7 @@ class OpenRouterProvider:
         self._last_response_id = ""
         self._last_raw_text = ""
         self._last_usage = None
+        self.last_failure_kind = None
 
     def enrich(self, prompt, tasks=()):
         if not self.api_key or self.client is None:
@@ -49,9 +50,12 @@ class OpenRouterProvider:
             message = getattr(choices[0], "message", None) if choices else None
             content = getattr(message, "content", "") if message else ""
             self._last_raw_text = str(content or "")
+            self.last_failure_kind = None
             usage = getattr(response, "usage", None)
             self._last_response_id = str(getattr(response, "id", "") or "")
             self._last_usage = usage
             return RawAIResponse(provider=self.name, model=self.model, raw_text=str(content or ""), response_id=self._last_response_id, finish_reason="completed", input_tokens=int(getattr(usage, "prompt_tokens", 0) or 0), output_tokens=int(getattr(usage, "completion_tokens", 0) or 0), created_at=datetime.now(UTC).isoformat())
         except Exception as exc:
+            status = getattr(exc, "status_code", None) or getattr(getattr(exc, "response", None), "status_code", None)
+            self.last_failure_kind = {401: "authentication", 403: "authorization", 402: "payment_required", 429: "rate_limited"}.get(status, "provider_unavailable" if status and int(status) >= 500 else "unknown")
             return RawAIResponse(provider=self.name, model=self.model, finish_reason=f"{type(exc).__name__}: {exc}", created_at=datetime.now(UTC).isoformat())
