@@ -146,9 +146,13 @@ class PublicationCompositionRoot:
         if hashnode_enabled:
             token = str(getattr(settings, "hashnode_personal_access_token", "") or "")
             publication_id = str(getattr(settings, "hashnode_publication_id", "") or "")
-            if not token or not publication_id or not bool(getattr(settings, "hashnode_require_pro", True)):
-                raise ValueError("invalid Hashnode configuration")
-            hashnode_publisher = HashnodePublisher(token, publication_id, x_request, getattr(settings, "hashnode_api_url", "https://gql-beta.hashnode.com/"), getattr(settings, "hashnode_request_timeout_seconds", 10), getattr(settings, "hashnode_publish", False))
+            endpoint = str(getattr(settings, "hashnode_api_url", "https://gql-beta.hashnode.com/") or "")
+            from urllib.parse import urlparse
+            if not token or not publication_id or not bool(getattr(settings, "hashnode_require_pro", True)) or urlparse(endpoint).scheme not in {"http", "https"} or not urlparse(endpoint).netloc:
+                print("hashnode_failure_kind=hashnode_config_missing")
+                hashnode_enabled = False
+            else:
+                hashnode_publisher = HashnodePublisher(token, publication_id, x_request, endpoint, getattr(settings, "hashnode_request_timeout_seconds", 10), getattr(settings, "hashnode_publish", False))
         reddit_enabled=bool(getattr(settings,"reddit_enabled",False)); reddit_publisher=None
         if reddit_enabled:
             from core.renderers.reddit import normalize_subreddit
