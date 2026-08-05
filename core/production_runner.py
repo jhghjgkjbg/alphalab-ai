@@ -145,7 +145,7 @@ class ProductionRunner:
         except Exception:
             pass
 
-    async def run(self, items):
+    async def _run_single(self, items, _candidate_override=None):
         metrics = PipelineMetricsCollector(); stages = {}
         items = self._published_filter(self._batch_deduplicate(items))
         if not items: raise ValueError("no new candidates")
@@ -154,7 +154,7 @@ class ProductionRunner:
             self.adaptive_scheduler.seed_persisted_success(self.store.latest_successful_publication_at())
             self._adaptive_seeded = True
         immediate = self.adaptive_scheduler.select_immediate(items)
-        candidate = getattr(immediate, "item", immediate) if immediate is not None else self._select_best_candidate(items)
+        candidate = _candidate_override or (getattr(immediate, "item", immediate) if immediate is not None else self._select_best_candidate(items))
         self.adaptive_decision = "immediate" if immediate is not None else "scheduled"
         reservation = None
         if self.store is not None and hasattr(self.store, "reserve"):
@@ -312,3 +312,22 @@ class ProductionRunner:
             if reservation:
                 self.store.release_reservation(*reservation)
             raise
+
+    async def run(self, items):
+        """Try ranked candidates in order, stopping after one successful publication."""
+        candidates = self._published_filter(self._batch_deduplicate(items))
+        if not candidates:
+            raise ValueError("no new candidates")
+        for candidate in candidates:
+            candidate_id = str(getattr(candidate, "external_id", None) or (getattr(candidate, "payload", {}) or {}).get("id") or "")
+            try:
+                return await self._run_single(candidates, _candidate_override=candidate)
+            except ValueError as exc:
+                reason = str(exc)
+                if reason in {"publication_blocked_empty_content", "candidate already reserved"}:
+                    print(f"candidate_skipped_unusable_content={candidate_id}")
+                    continue
+                raise
+        print("publication_result=no_usable_candidate")
+        report = DeliveryReport("blocked", "blocked", "blocked", "blocked", failure_reasons={"publication": "no_usable_candidate"}, details={}, statuses={})
+        return ProductionRunResult(report, PipelineMetricsCollector().finish(), {"delivery": "blocked"})

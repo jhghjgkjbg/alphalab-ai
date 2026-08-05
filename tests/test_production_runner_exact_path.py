@@ -74,8 +74,8 @@ class ExactProductionPathTests(unittest.TestCase):
             item = SimpleNamespace(external_id="empty-article", source="test", payload={"title": "Original", "summary": "Original summary", "url": "https://example.test/empty"})
             trace=[]; website=_Website(trace); delivery=DeliveryOrchestrator(website, None, confirm_send=True)
             root=SimpleNamespace(builder=PublicationBuilder(), articles_store=store, ai_enrichment_engine=_EmptyAI(), delivery_orchestrator=delivery)
-            with self.assertRaisesRegex(ValueError, "publication_blocked_empty_content"):
-                asyncio.run(ProductionRunner(composition_root=root, confirm_send=True).run([item]))
+            result = asyncio.run(ProductionRunner(composition_root=root, confirm_send=True).run([item]))
+            self.assertEqual(result.delivery.overall, "blocked")
             self.assertEqual(trace, [])
             self.assertEqual(store.latest(), [])
         finally:
