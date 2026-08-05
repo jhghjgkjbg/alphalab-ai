@@ -51,6 +51,8 @@ class PublicationCompositionRoot:
         from core.ai_enrichment.engine import NoOpAIProvider
         from core.ai_enrichment.providers.openrouter import OpenRouterProvider
         from core.ai_enrichment.providers.openai import OpenAIProvider
+        from core.ai_enrichment.providers.gemini import GeminiProvider
+        from core.ai_enrichment.providers.anthropic import AnthropicProvider
         from core.language_variants import LanguageVariantEngine
         from core.renderers import WebsiteRenderer, TelegramRenderer
         from core.publishers.website import WebsitePublisher
@@ -60,7 +62,26 @@ class PublicationCompositionRoot:
         from core.delivery import DeliveryOrchestrator
         from core.storage import SQLitePublishedArticlesStore
         from core.analytics import DistributionEventStore
-        registry = AIProviderRegistry(default="noop")
+        def gemini_request(model, prompt, key, timeout):
+            import httpx
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+            payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
+            with httpx.Client(timeout=timeout) as client:
+                return client.post(url, json=payload, headers={"x-goog-api-key": key, "content-type": "application/json"})
+        def anthropic_request(model, prompt, key, timeout):
+            import httpx
+            payload = {"model": model, "max_tokens": getattr(settings, "ai_max_output_tokens", 1200), "messages": [{"role": "user", "content": prompt}]}
+            headers = {"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"}
+            with httpx.Client(timeout=timeout) as client:
+                return client.post("https://api.anthropic.com/v1/messages", json=payload, headers=headers)
+        configured_order = str(getattr(settings, "ai_provider_order", "openrouter,openai,gemini,anthropic") or "")
+        allowed = {"openrouter", "openai", "gemini", "anthropic"}
+        order = []
+        for value in configured_order.split(","):
+            value = value.strip().lower()
+            if value in allowed and value not in order: order.append(value)
+        if not order: order = ["openrouter", "openai", "gemini", "anthropic"]
+        registry = AIProviderRegistry(default="noop", order=order)
         provider = NoOpAIProvider(); registry.register("noop", provider)
         name = str(getattr(settings, "ai_provider", "noop") or "noop").lower()
         enabled = bool(getattr(settings, "ai_enabled", False))
@@ -76,6 +97,19 @@ class PublicationCompositionRoot:
             if not key: raise ValueError("missing OpenAI API key")
             provider = OpenAIProvider(key, settings.openai_model, OpenAI(api_key=key, timeout=settings.openai_timeout_seconds, max_retries=settings.openai_max_retries), settings.openai_max_output_tokens)
             registry.register(name, provider); registry._default = name
+        if enabled:
+            if registry.get("openrouter") is None and getattr(settings, "openrouter_api_key", ""):
+                from openai import OpenAI
+                key = str(settings.openrouter_api_key)
+                registry.register("openrouter", OpenRouterProvider(key, settings.openrouter_model, OpenAI(api_key=key, base_url=settings.openrouter_base_url, timeout=settings.openrouter_timeout_seconds, max_retries=settings.openrouter_max_retries), settings.openrouter_max_output_tokens))
+            if registry.get("openai") is None and getattr(settings, "openai_api_key", ""):
+                from openai import OpenAI
+                key = str(settings.openai_api_key)
+                registry.register("openai", OpenAIProvider(key, settings.openai_model, OpenAI(api_key=key, timeout=settings.openai_timeout_seconds, max_retries=settings.openai_max_retries), settings.openai_max_output_tokens))
+            gemini_key = str(getattr(settings, "gemini_api_key", "") or "")
+            if gemini_key: registry.register("gemini", GeminiProvider(gemini_key, getattr(settings, "gemini_model", "gemini-2.0-flash"), gemini_request, getattr(settings, "gemini_timeout_seconds", 30)))
+            anthropic_key = str(getattr(settings, "anthropic_api_key", "") or "")
+            if anthropic_key: registry.register("anthropic", AnthropicProvider(anthropic_key, getattr(settings, "anthropic_model", "claude-3-5-haiku-latest"), anthropic_request, getattr(settings, "anthropic_timeout_seconds", 30)))
         ai_engine = AIEnrichmentEngine(registry=registry)
         website_renderer = WebsiteRenderer("en")
         telegram_renderer = TelegramRenderer("en")

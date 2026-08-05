@@ -188,6 +188,9 @@ class Settings(BaseSettings):
     metrics_engine: bool = False
     ai_layer: bool = True
     ai_provider: str = "noop"
+    ai_provider_order: str = Field(default="openrouter,openai,gemini,anthropic", validation_alias=AliasChoices("AI_PROVIDER_ORDER", "ai_provider_order"))
+    ai_request_timeout_seconds: int = Field(default=30, validation_alias=AliasChoices("AI_REQUEST_TIMEOUT_SECONDS", "ai_request_timeout_seconds"))
+    ai_max_output_tokens: int = Field(default=1200, validation_alias=AliasChoices("AI_MAX_OUTPUT_TOKENS", "ai_max_output_tokens"))
     ai_enabled: bool = False
     openai_model: str = "gpt-4.1-mini"
     # OpenAI's standard environment variable is intentionally unprefixed.
@@ -204,6 +207,12 @@ class Settings(BaseSettings):
     openrouter_max_output_tokens: int = 1200
     openrouter_site_url: str = ""
     openrouter_app_name: str = "AlphaLab AI"
+    gemini_api_key: str = Field(default="", validation_alias=AliasChoices("GEMINI_API_KEY", "ALPHALAB_GEMINI_API_KEY", "gemini_api_key"))
+    gemini_model: str = Field(default="gemini-2.0-flash", validation_alias=AliasChoices("GEMINI_MODEL", "ALPHALAB_GEMINI_MODEL", "gemini_model"))
+    gemini_timeout_seconds: int = Field(default=30, validation_alias=AliasChoices("GEMINI_TIMEOUT_SECONDS", "ALPHALAB_GEMINI_TIMEOUT", "gemini_timeout_seconds"))
+    anthropic_api_key: str = Field(default="", validation_alias=AliasChoices("ANTHROPIC_API_KEY", "anthropic_api_key"))
+    anthropic_model: str = Field(default="claude-3-5-haiku-latest", validation_alias=AliasChoices("ANTHROPIC_MODEL", "anthropic_model"))
+    anthropic_timeout_seconds: int = Field(default=30, validation_alias=AliasChoices("ANTHROPIC_TIMEOUT_SECONDS", "anthropic_timeout_seconds"))
     prompt_pipeline: bool = True
     prompt_version: str = "v1"
     ai_task_engine: bool = True

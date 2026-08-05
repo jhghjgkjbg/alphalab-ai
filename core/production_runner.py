@@ -178,7 +178,8 @@ class ProductionRunner:
             context = getattr(publication, "ai_context", None)
             if self.ai_engine:
                 ai_summary = ((getattr(context, "long_summary", "") or getattr(context, "short_summary", "") or getattr(context, "en_body", "")) if context else "")
-                if not self._usable_content(publication.title, ai_summary):
+                source_fallback = (getattr(publication, "metadata", {}) or {}).get("enrichment_mode") == "source_fallback"
+                if not self._usable_content(publication.title, ai_summary) and not source_fallback:
                     failure_kind = getattr(self.provider, "last_failure_kind", None) or "unknown"
                     print("ai_enrichment_failed")
                     if failure_kind == "payment_required":
