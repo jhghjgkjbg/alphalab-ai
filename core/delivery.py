@@ -57,8 +57,10 @@ class DeliveryOrchestrator:
             pass
 
     async def _call(self, publisher, view):
+        name = publisher.__class__.__name__.lower()
         result = publisher.publish(view)
-        return await result if inspect.isawaitable(result) else result
+        outcome = await result if inspect.isawaitable(result) else result
+        return outcome
 
     @staticmethod
     def _normalize(result):
@@ -113,12 +115,11 @@ class DeliveryOrchestrator:
         # turn an otherwise successful delivery into a failure.
         active = [binding.destination for binding in bindings if getattr(c, binding.destination, True if self.bindings else False) and binding.publisher is not None]
         active_statuses = [statuses.get(name, "blocked") for name in active]
-        for binding in bindings:
-            enabled = bool(getattr(c, binding.destination, True if self.bindings else False))
-            if enabled:
-                status = statuses.get(binding.destination, "blocked")
-                reason = reasons.get(binding.destination, "") or "none"
-                print(f"destination={binding.destination} instantiated={'yes' if binding.publisher is not None else 'no'} enabled={'yes' if enabled else 'no'} result={status} failure_kind={reason}")
+        print(f"active_destinations={','.join(active)}")
+        active_status_text = ",".join("{}:{}".format(name, statuses.get(name, "blocked")) for name in active)
+        active_reason_text = ",".join("{}:{}".format(name, reasons.get(name, "none") or "none") for name in active)
+        print(f"active_statuses={active_status_text}")
+        print(f"active_failure_reasons={active_reason_text}")
         if not active_statuses:
             overall = "blocked"
         elif any(status == "failed" for status in active_statuses):
