@@ -56,7 +56,6 @@ class PublicationCompositionRoot:
         from core.publishers.website import WebsitePublisher
         from core.publishers.hashnode import HashnodePublisher
         from core.publishers.reddit import RedditDraftPublisher
-        from core.publishers.reddit_remote import RedditRemotePublisher, RedditBridgeHttpTransport
         from core.publishers.telegram import TelegramViewPublisher
         from core.delivery import DeliveryOrchestrator
         from core.storage import SQLitePublishedArticlesStore
@@ -157,8 +156,15 @@ class PublicationCompositionRoot:
             if kind not in {"self","link"}: raise ValueError("reddit_invalid_post_kind")
             mode = str(getattr(settings, "reddit_mode", "draft_export"))
             if mode == "remote_publish":
-                transport = reddit_remote_transport or RedditBridgeHttpTransport(getattr(settings, "reddit_devvit_endpoint", ""), getattr(settings, "reddit_bridge_token", ""), getattr(settings, "reddit_http_timeout_seconds", 10))
-                reddit_publisher = RedditRemotePublisher(transport)
+                try:
+                    from core.publishers.reddit_remote import RedditRemotePublisher, RedditBridgeHttpTransport
+                    transport = reddit_remote_transport or RedditBridgeHttpTransport(getattr(settings, "reddit_devvit_endpoint", ""), getattr(settings, "reddit_bridge_token", ""), getattr(settings, "reddit_http_timeout_seconds", 10))
+                    reddit_publisher = RedditRemotePublisher(transport)
+                except ModuleNotFoundError as exc:
+                    if exc.name != "core.publishers.reddit_remote":
+                        raise
+                    print("reddit remote publisher unavailable; continuing without Reddit delivery")
+                    reddit_enabled = False
             else:
                 reddit_publisher=RedditDraftPublisher(getattr(settings,"reddit_outbox_directory","runtime/reddit_outbox"), subreddit, kind, getattr(settings,"reddit_include_tracking",False), getattr(settings,"reddit_require_manual_rule_review",True))
         store = SQLitePublishedArticlesStore()
