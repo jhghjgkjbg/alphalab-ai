@@ -1150,7 +1150,7 @@ async def main(argv: list[str] | None = None) -> None:
                 "selected_provider_class": getattr(dep(getattr(runner.composition_root, "selected_provider", None), getattr(runner, "provider", None)), "__class__", type(None)).__name__,
                 "website_publisher_class": getattr(dep(getattr(runner.composition_root, "website_publisher", None), getattr(runner.delivery, "website_publisher", None)), "__class__", type(None)).__name__,
                 "telegram_publisher_en_class": getattr(getattr(runner.composition_root, "telegram_publisher_en", None), "__class__", type(None)).__name__,
-                "telegram_publisher_ru_class": type(None).__name__,
+                "telegram_publisher_ru_class": getattr(getattr(runner.composition_root, "telegram_publisher_ru", None), "__class__", type(None)).__name__,
                 "website_renderer_class": "WebsiteRenderer",
                 "telegram_renderer_class": "TelegramRenderer",
             }
@@ -1374,7 +1374,8 @@ async def main(argv: list[str] | None = None) -> None:
                     with urllib.request.urlopen(req, timeout=timeout) as response:
                         body = response.read()
                         content_type = response.headers.get_content_type()
-                        if "xml" in content_type or ".xml" in request_url:
+                        accept = str((headers or {}).get("Accept", "")).lower()
+                        if "xml" in content_type or ".xml" in request_url or "atom" in accept or "rss" in accept:
                             payload = body
                         else:
                             payload = json.loads(body)
