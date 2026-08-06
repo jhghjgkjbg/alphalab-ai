@@ -90,6 +90,19 @@ def editorial_relevance(item):
     penalties = sum(1 for term in IRRELEVANT_TERMS if term in text)
     return max(0.0, min(1.0, min(1.0, hits / 4.0) - penalties * .35))
 
+def editorial_eligibility(item, relevance, reputation):
+    payload = getattr(item, "payload", {}) or {}
+    title = " ".join(str(payload.get("title") or "").split())
+    words = [w for w in title.split() if any(ch.isalnum() for ch in w)]
+    generic = title.casefold() in {"pareto front", "ai news", "update", "new model", "github"} or len(words) < 4
+    content = str(payload.get("content") or payload.get("body") or payload.get("summary") or "").strip()
+    source = str(getattr(item, "source", ""))
+    if relevance < .50: return False, "low_relevance"
+    if source in {"hacker_news", "reddit", "lobsters", "devto"} and relevance < .65: return False, "low_relevance"
+    if not content: return False, "content_missing"
+    if generic: return False, "generic_title"
+    return True, "eligible"
+
 
 def production_scoring_request(item, ranking_score):
     """Preserve source-provided scoring signals at the production boundary."""
@@ -1149,6 +1162,19 @@ async def main(argv: list[str] | None = None) -> None:
             enriched = replace(item, payload=payload)
             ranked.append((enriched, final_score, editorial_relevance(enriched), SOURCE_REPUTATION.get(str(getattr(item, "source", "")), .5), index))
         ranked.sort(key=lambda row: (-row[1], -row[2], -row[3], -len(str(row[0].payload.get("content") or row[0].payload.get("summary") or "")), row[4]))
+        eligible = []
+        for row in ranked:
+            ok, reason = editorial_eligibility(row[0], row[2], row[3])
+            if ok:
+                eligible.append(row)
+            else:
+                candidate_id = str(getattr(row[0], "external_id", None) or row[0].payload.get("id") or "")
+                print(f"candidate_rejected_reason={candidate_id},{reason}")
+        ranked = eligible
+        print(f"eligible_candidates_count={len(ranked)}")
+        if not ranked:
+            print("publication_result=no_usable_candidate")
+            return
         sources = {str(getattr(row[0], "source", "")) for row in ranked}
         if len(sources) > 1:
             cap = max(1, int(len(ranked) * .4))
