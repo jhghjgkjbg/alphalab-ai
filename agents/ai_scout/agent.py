@@ -79,6 +79,17 @@ from core.source_manager.types import (
 
 logger = logging.getLogger(__name__)
 
+SOURCE_REPUTATION = {"openai_news": 1.0, "microsoft_research": .98, "huggingface_blog": .97, "github_blog": .96, "cloudflare_blog": .95, "docker_blog": .93, "jetbrains_blog": .93, "arxiv": .95, "github": .93, "hacker_news": .65, "devto": .70, "lobsters": .60}
+RELEVANCE_TERMS = ("ai", "artificial intelligence", "machine learning", "llm", "model", "developer", "programming", "cloud", "security", "open source", "robot", "research", "kubernetes", "github", "docker", "data engineering")
+IRRELEVANT_TERMS = ("celebrity", "sports", "football", "gaming", "stock market", "real estate", "recipe")
+
+def editorial_relevance(item):
+    payload = getattr(item, "payload", {}) or {}
+    text = " ".join(str(payload.get(k) or "") for k in ("title", "summary", "content", "body")).casefold()
+    hits = sum(1 for term in RELEVANCE_TERMS if term in text)
+    penalties = sum(1 for term in IRRELEVANT_TERMS if term in text)
+    return max(0.0, min(1.0, min(1.0, hits / 4.0) - penalties * .35))
+
 
 def production_scoring_request(item, ranking_score):
     """Preserve source-provided scoring signals at the production boundary."""
@@ -1131,7 +1142,26 @@ async def main(argv: list[str] | None = None) -> None:
             scored_items.append((item, publication.ranking_score))
         scored = scoring.score_items([production_scoring_request(item, score) for item, score in scored_items])
         score_by_id = {id(result.item): result.final_score for result in scored.items}
-        items = [replace(item, payload={**item.payload, "score": score_by_id.get(id(item), 0.0)}) for item, _ in scored_items]
+        ranked = []
+        for index, (item, _) in enumerate(scored_items):
+            final_score = score_by_id.get(id(item), 0.0)
+            payload = {**item.payload, "score": final_score}
+            enriched = replace(item, payload=payload)
+            ranked.append((enriched, final_score, editorial_relevance(enriched), SOURCE_REPUTATION.get(str(getattr(item, "source", "")), .5), index))
+        ranked.sort(key=lambda row: (-row[1], -row[2], -row[3], -len(str(row[0].payload.get("content") or row[0].payload.get("summary") or "")), row[4]))
+        sources = {str(getattr(row[0], "source", "")) for row in ranked}
+        if len(sources) > 1:
+            cap = max(1, int(len(ranked) * .4))
+            selected, deferred, counts = [], [], {}
+            for row in ranked:
+                source = str(getattr(row[0], "source", ""))
+                if counts.get(source, 0) < cap: selected.append(row); counts[source] = counts.get(source, 0) + 1
+                else: deferred.append(row)
+            ranked = selected + deferred
+        items = [row[0] for row in ranked]
+        if items:
+            winner = ranked[0]
+            print(f"selected_candidate_source={winner[0].source}\nselected_candidate_final_score={winner[1]}\nselected_candidate_relevance={winner[2]}\nselected_candidate_reputation={winner[3]}\nselected_candidate_content_quality={1 if (winner[0].payload.get('content') or winner[0].payload.get('summary')) else 0}\nselected_candidate_reason=editorial_rank")
         try:
             from core.publication.composition import PublicationCompositionRoot
             composition_root = PublicationCompositionRoot.from_settings(settings)
