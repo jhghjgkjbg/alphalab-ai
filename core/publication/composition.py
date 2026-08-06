@@ -137,10 +137,22 @@ class PublicationCompositionRoot:
         x_publisher = None
         x_enabled = bool(getattr(settings, "x_enabled", False))
         if x_enabled:
-            token = str(getattr(settings, "x_bearer_token", "") or "")
-            if not token: raise ValueError("missing X bearer token")
-            from core.publishers.x import XPublisher
-            x_publisher = XPublisher(token, x_request, getattr(settings, "x_api_base_url", "https://api.x.com"), getattr(settings, "x_request_timeout_seconds", 10))
+            token = str(getattr(settings, "x_access_token", "") or getattr(settings, "x_bearer_token", "") or "")
+            if not token and not getattr(settings, "x_refresh_token", ""): raise ValueError("missing X user token")
+            from core.publishers.x import XPublisher, XOAuthTokenProvider
+            access = str(getattr(settings, "x_access_token", "") or "")
+            refresh = str(getattr(settings, "x_refresh_token", "") or "")
+            provider = None
+            state_store = None
+            if refresh and getattr(settings, "x_client_id", ""):
+                try:
+                    from core.credentials.x_token_store import XTokenStore
+                    state_store = XTokenStore(getattr(settings, "x_token_state_path", "/opt/alphalab-ai/runtime/secrets/x_oauth_tokens.json"))
+                except Exception:
+                    state_store = None
+                provider = XOAuthTokenProvider(access, refresh, getattr(settings, "x_client_id", ""), getattr(settings, "x_client_secret", ""), getattr(settings, "x_token_url", "https://api.x.com/2/oauth2/token"), x_request, timeout_seconds=getattr(settings, "x_request_timeout_seconds", 10), state_store=state_store)
+                token = access
+            x_publisher = XPublisher(token, x_request, getattr(settings, "x_api_base_url", "https://api.x.com"), getattr(settings, "x_request_timeout_seconds", 10), token_provider=provider)
         linkedin_publisher = None
         linkedin_enabled = bool(getattr(settings, "linkedin_enabled", False))
         if linkedin_enabled:

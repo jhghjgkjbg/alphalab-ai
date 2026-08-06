@@ -17,7 +17,23 @@ def check(settings, runtime_dir=None, lock_path=None):
         checks[name] = {"enabled": bool(enabled), "ready": not enabled or not missing, "mode": mode, "missing_fields": missing, "warnings": []}
     add("telegram_en", getattr(settings, "telegram_en_enabled", True), [("ALPHALAB_TELEGRAM_BOT_TOKEN", getattr(settings, "telegram_bot_token", None)), ("ALPHALAB_TELEGRAM_EN_CHAT_ID", getattr(settings, "telegram_en_chat_id", None))])
     add("telegram_ru", getattr(settings, "telegram_ru_enabled", False), [("ALPHALAB_TELEGRAM_BOT_TOKEN", getattr(settings, "telegram_bot_token", None)), ("ALPHALAB_TELEGRAM_RU_CHAT_ID", getattr(settings, "telegram_ru_chat_id", None))])
-    add("x", getattr(settings, "x_enabled", False), [("ALPHALAB_X_BEARER_TOKEN", getattr(settings, "x_bearer_token", ""))])
+    x_enabled = getattr(settings, "x_enabled", False)
+    x_access = getattr(settings, "x_access_token", "") or ""
+    x_refresh = getattr(settings, "x_refresh_token", "") or ""
+    x_client = getattr(settings, "x_client_id", "") or ""
+    x_missing = []
+    if x_enabled:
+        if not (x_access or x_refresh): x_missing.append("ALPHALAB_X_ACCESS_TOKEN")
+        if not x_refresh: x_missing.append("ALPHALAB_X_REFRESH_TOKEN")
+        if not x_client: x_missing.append("ALPHALAB_X_CLIENT_ID")
+    checks["x"] = {"enabled": bool(x_enabled), "ready": not x_enabled or not x_missing, "mode": "remote_publish", "missing_fields": x_missing, "warnings": (["ALPHALAB_X_BEARER_TOKEN_DEPRECATED"] if x_enabled and getattr(settings, "x_bearer_token", "") else [])}
+    if x_enabled:
+        state_path = Path(getattr(settings, "x_token_state_path", os.environ.get("ALPHALAB_X_TOKEN_STATE_PATH", "runtime/secrets/x_oauth_tokens.json")))
+        if state_path.exists():
+            if not state_path.is_file(): checks["x"]["ready"] = False; checks["x"]["warnings"].append("ALPHALAB_X_TOKEN_STATE_PATH_NOT_FILE")
+            elif os.name != "nt" and (state_path.stat().st_mode & 0o077): checks["x"]["ready"] = False; checks["x"]["warnings"].append("ALPHALAB_X_TOKEN_STATE_PATH_INSECURE")
+        elif not state_path.parent.exists() and not os.access(state_path.parent.parent if state_path.parent.parent.exists() else Path("."), os.W_OK):
+            checks["x"]["ready"] = False; checks["x"]["warnings"].append("ALPHALAB_X_TOKEN_STATE_PATH_UNAVAILABLE")
     add("linkedin", getattr(settings, "linkedin_enabled", False), [("ALPHALAB_LINKEDIN_ACCESS_TOKEN", getattr(settings, "linkedin_access_token", "")), ("ALPHALAB_LINKEDIN_AUTHOR_URN", getattr(settings, "linkedin_author_urn", ""))])
     add("medium", getattr(settings, "medium_enabled", False), [("ALPHALAB_MEDIUM_INTEGRATION_TOKEN", getattr(settings, "medium_integration_token", "")), ("ALPHALAB_MEDIUM_AUTHOR_ID", getattr(settings, "medium_author_id", ""))])
     add("devto", getattr(settings, "devto_enabled", False), [("ALPHALAB_DEVTO_API_KEY", getattr(settings, "devto_api_key", ""))])
