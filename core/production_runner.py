@@ -60,6 +60,17 @@ class ProductionRunner:
         content = " ".join(str(content or "").split())
         return bool(content and content != title)
 
+    @staticmethod
+    def _valid_headline(text, language="en"):
+        value = " ".join(str(text or "").split())
+        generic = {"pareto front", "ai news", "update", "new model", "github"}
+        words = [w for w in value.split() if any(ch.isalnum() for ch in w)]
+        if not value or value.casefold() in generic or len(words) < 4:
+            return False
+        if language == "ru" and not ProductionRunner._valid_text(value, "ru"):
+            return False
+        return not ("!!" in value or "??" in value)
+
     def __init__(self, store=None, delivery=None, provider=None, composition_root=None, confirm_send=False, reservation_ttl_seconds=1800, pending_ttl_seconds=1800):
         self.composition_root = composition_root
         self.store = store or getattr(composition_root, "articles_store", None)
@@ -205,13 +216,15 @@ class ProductionRunner:
             if context and (getattr(context, "short_summary", "") or getattr(context, "long_summary", "") or getattr(context, "headline_suggestions", ())):
                 summary = getattr(context, "long_summary", "") or getattr(context, "short_summary", "")
                 suggestions = getattr(context, "headline_suggestions", ()) or ()
-                title = suggestions[0] if suggestions else publication.title
-                if not self._valid_text(title, "en"):
+                title = next((candidate for candidate in (*suggestions, getattr(context, "en_title", ""), publication.title) if self._valid_text(candidate, "en") and self._valid_headline(candidate, "en")), "")
+                if not title:
                     title = publication.title if self._valid_text(publication.title, "en") else ""
+                    print("headline_quality=generic_fallback")
                 if not self._valid_text(summary, "en"):
                     summary = publication.summary if self._valid_text(publication.summary, "en") else ""
                 translation = getattr(context, "translation", "") or ""
-                ru_title = getattr(context, "ru_title", "") or ""
+                ru_candidates = (getattr(context, "ru_title", ""),)
+                ru_title = next((candidate for candidate in ru_candidates if self._valid_headline(candidate, "ru")), getattr(context, "ru_title", "") or "")
                 ru_body = getattr(context, "ru_body", "") or ""
                 variants = {lang: replace(v, title=(title if lang != "ru" else (ru_title or v.title)), summary=(summary if lang != "ru" else (ru_body or v.summary)), body=((v.body or summary or publication.summary) if lang != "ru" else (ru_body or v.body or v.summary))) for lang, v in publication.variants.items()}
                 publication = replace(publication, title=title, summary=summary, variants=variants)

@@ -65,6 +65,14 @@ class ScoringEngine:
                     continue
                 package_count += 1
             if score >= self._min_score: scored.append((ScoredItem(request.item, score), index))
-        scored.sort(key=lambda pair: (-pair[0].final_score, pair[1]))
+        def tie_key(pair):
+            scored_item, index = pair
+            request = requests[index]
+            payload = getattr(request.item, "payload", {}) or {}
+            body = str(payload.get("content") or payload.get("body") or "").strip()
+            summary = str(payload.get("summary") or payload.get("description") or "").strip()
+            completeness = 2 if body else 1 if summary else 0
+            return (-scored_item.final_score, -float(request.source_priority or 0), -completeness, -(len(body) + len(summary)), index)
+        scored.sort(key=tie_key)
         items = tuple(pair[0] for pair in scored)
         return ScoringResult(items, ScoringStats(len(requests), len(items)))

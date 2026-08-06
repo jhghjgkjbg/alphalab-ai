@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import asyncio
 import random
+import re
 try:
     import httpx
 except ImportError:  # optional outside the production transport environment
@@ -66,6 +67,9 @@ class TelegramClient:
 
         url = f"https://api.telegram.org/bot{self._bot_token}/sendMessage"
         payload: dict[str, str] = {"chat_id": self._chat_id, "text": text}
+        first_url = re.search(r"https?://[^\s]+", text)
+        if first_url:
+            payload["link_preview_options"] = {"url": first_url.group(0), "is_disabled": False}
         if self._parse_mode is not None:
             payload["parse_mode"] = self._parse_mode
         for attempt in range(1, self._max_attempts + 1):
